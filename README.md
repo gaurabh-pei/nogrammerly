@@ -1,8 +1,33 @@
 <p align="center"><img src="Assets/Nogrammerly-logo.png" width="520" alt="Nogrammerly"></p>
 
-<p align="center">A private, Grammarly-style writing assistant for macOS. It checks spelling, grammar, clarity and tone in Slack, Notes, Mail, Zoom, Sublime Text and most other apps, and can rewrite your text, all on your Mac.</p>
+<p align="center"><b>The free, open-source, 100% on-device Grammarly alternative for macOS.</b><br>
+Spelling, grammar, clarity and tone checks plus one-click rewrites, in Slack, Notes, Mail, Zoom, Sublime Text and almost every other app.<br>
+Powered by Apple Intelligence. Your writing never leaves your Mac.</p>
+
+<p align="center">
+  <a href="https://github.com/gaurabh-pei/nogrammerly/releases/latest"><img src="https://img.shields.io/github/v/release/gaurabh-pei/nogrammerly?label=download&color=4f46e5" alt="Download"></a>
+  <a href="https://github.com/gaurabh-pei/nogrammerly/actions/workflows/swift.yml"><img src="https://github.com/gaurabh-pei/nogrammerly/actions/workflows/swift.yml/badge.svg" alt="Build"></a>
+  <img src="https://img.shields.io/badge/macOS-14%2B-black?logo=apple" alt="macOS 14+">
+  <img src="https://img.shields.io/badge/Swift-native-F05138?logo=swift&logoColor=white" alt="Swift">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT license"></a>
+</p>
+
+<p align="center"><a href="https://github.com/gaurabh-pei/nogrammerly/releases/latest"><b>⬇ Download for Mac</b></a> · <a href="#how-it-works">How it works</a> · <a href="CONTRIBUTING.md">Contribute</a></p>
 
 ---
+
+## Why Nogrammerly?
+
+Cloud writing assistants read everything you type, including private Slack DMs, work email and medical notes, and send it to their servers. Nogrammerly does the same job **entirely on your Mac**, using Apple's on-device language model.
+
+| | Nogrammerly | Cloud writing assistants |
+|---|---|---|
+| Where your text goes | **Stays on your Mac** | Sent to their servers |
+| Price | **Free** | Free tier, then a subscription |
+| Account needed | **No** | Yes |
+| Works offline | **Yes** | No |
+| Source code | **Open (MIT)** | Closed |
+| App size | **~2 MB** native Swift | Hundreds of MB |
 
 ## Features
 
@@ -14,31 +39,22 @@
 - **A built-in editor** with a writing score, a tone picker and a ✦ Rewrite button.
 - **Private by design.** Checks use macOS's spell checker, built-in style rules and Apple's on-device Foundation Models (Apple Intelligence). Nothing is sent over the network.
 
-## Requirements
-
-| | |
-|---|---|
-| macOS | 14 Sonoma or later (AI checks and rewrites need macOS 26+ with Apple Intelligence turned on) |
-| Build tools | Swift 5.10+ (the Xcode Command Line Tools are enough; full Xcode isn't required) |
-| Permission | Accessibility (System Settings › Privacy & Security › Accessibility) |
-
-Without Apple Intelligence you still get spelling, grammar and style checks. The AI proofreading and rewrites switch off automatically.
-
 ## Install
 
-Open `dist/Nogrammerly-Installer.dmg` (see [Build](#build)) and drag **Nogrammerly** into **Applications**. Then open it from Applications.
+1. Download **Nogrammerly-Installer.dmg** from the [latest release](https://github.com/gaurabh-pei/nogrammerly/releases/latest).
+2. Open it and drag **Nogrammerly** into **Applications**.
+3. Open Nogrammerly from Applications. The app isn't notarized by Apple yet, so the first time, macOS will block it. Go to **System Settings › Privacy & Security**, scroll down and click **Open Anyway**. You only need to do this once.
+4. Follow the **Setup** window. It walks you through allowing Accessibility access and shows a live status for each step.
 
-On first launch the **Setup** window walks you through each step and shows which ones are done:
-
-1. Install in Applications.
-2. Allow Accessibility access.
-3. Turn on everywhere mode. This starts automatically once access is allowed.
-4. *Optional:* turn on Apple Intelligence.
-5. Try it in TextEdit.
-
-Because the app isn't notarized, macOS may say it "cannot be opened". If so, go to **System Settings › Privacy & Security** and click **Open Anyway** (once).
+| Requirement | |
+|---|---|
+| macOS | 14 Sonoma or later, on Apple silicon |
+| AI checks & rewrites | macOS 26+ with Apple Intelligence turned on. Without it you still get spelling, grammar and style checks. |
+| Permission | Accessibility (System Settings › Privacy & Security › Accessibility) |
 
 ## Build
+
+You need the Xcode Command Line Tools (Swift 5.10+). Full Xcode isn't required.
 
 ```bash
 # One-time: create a self-signed code-signing identity in your login keychain.
@@ -84,3 +100,8 @@ Nogrammerly works the way system-wide checkers like Grammarly Desktop do:
 ## Uninstall
 
 Quit Nogrammerly from the ✦ menu. Drag it from Applications to the Bin, then remove it from System Settings › Privacy & Security › Accessibility.
+
+---
+
+<p align="center">Nogrammerly is an independent open-source project. It is not affiliated with, endorsed by or connected to Grammarly, Inc.<br>
+If it saves you a subscription, please ⭐ <b>star the repo</b>. It helps other people find it.</p>

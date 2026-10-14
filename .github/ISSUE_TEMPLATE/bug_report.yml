@@ -1,0 +1,36 @@
+name: Bug report
+description: Something isn't working
+labels: [bug]
+body:
+  - type: input
+    id: app
+    attributes:
+      label: App you were typing in
+      description: Underlines and replacements depend on what each app exposes to macOS, so this matters most.
+      placeholder: e.g. Slack 4.52, Notes, Sublime Text 4
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version and Mac
+      placeholder: e.g. macOS 26.1, M2 MacBook Air
+    validations:
+      required: true
+  - type: dropdown
+    id: ai
+    attributes:
+      label: Is Apple Intelligence turned on?
+      options: ["Yes", "No", "Not sure"]
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs (optional)
+      description: Run `log stream --predicate 'process == "Nogrammerly"'` while reproducing. Please remove any of your own text first.
+      render: text
