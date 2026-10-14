@@ -1,6 +1,4 @@
-<p align="center"><img src="Assets/Nogrammerly-icon.png" width="128" alt="Nogrammerly icon"></p>
-
-<h1 align="center">Nogrammerly</h1>
+<p align="center"><img src="Assets/Nogrammerly-logo.png" width="520" alt="Nogrammerly"></p>
 
 <p align="center">A private, Grammarly-style writing assistant for macOS. It checks spelling, grammar, clarity and tone in Slack, Notes, Mail, Zoom, Sublime Text and most other apps, and can rewrite your text, all on your Mac.</p>
 
