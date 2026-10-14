@@ -100,10 +100,17 @@ final class SystemWritingAssistant: NSObject, NSMenuDelegate {
         let element = focused as! AXUIElement
         // Never read password fields.
         if attribute(kAXSubroleAttribute, of: element) as? String == kAXSecureTextFieldSubrole as String { return nil }
-        // Only editable text: it must report a selection range (static labels and web page text do not).
+        // Only editable text: it must report a selection range (static labels and web page text do not)…
         var selection: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &selection) == .success else { return nil }
+        // …and accept new text. Read-only text views such as Terminal's scrollback report a selection too.
+        guard isSettable(kAXSelectedTextAttribute, of: element) || isSettable(kAXValueAttribute, of: element) else { return nil }
         return element
+    }
+
+    private func isSettable(_ name: String, of element: AXUIElement) -> Bool {
+        var settable: DarwinBoolean = false
+        return AXUIElementIsAttributeSettable(element, name as CFString, &settable) == .success && settable.boolValue
     }
 
     /// Debounced on-device model pass; merges its findings behind the instant spelling/style results.
@@ -121,10 +128,10 @@ final class SystemWritingAssistant: NSObject, NSMenuDelegate {
 
     private func layoutMarks() {
         guard let element else { return }
-        let frame = elementFrame(element)
+        let frame = visibleFrame(of: element)
         marks = suggestions.compactMap { suggestion in
             guard let rect = bounds(of: suggestion.range, in: element), rect.width > 0, rect.height > 0, rect.height < 120,
-                  frame.map({ $0.insetBy(dx: -2, dy: -2).contains(CGPoint(x: rect.midX, y: rect.midY)) }) ?? true else { return nil }
+                  frame?.insetBy(dx: -2, dy: -2).contains(rect) == true else { return nil }
             return Mark(suggestion: suggestion, rect: rect)
         }
         overlay.show(marks.map { (rect: toCocoa($0.rect), color: $0.suggestion.kind.color) })
@@ -418,6 +425,22 @@ final class SystemWritingAssistant: NSObject, NSMenuDelegate {
         var origin = CGPoint.zero, size = CGSize.zero
         guard AXValueGetValue(positionValue as! AXValue, .cgPoint, &origin), AXValueGetValue(sizeValue as! AXValue, .cgSize, &size) else { return nil }
         return CGRect(origin: origin, size: size)
+    }
+
+    /// The on-screen part of a field. A scrolling text view reports its whole document as its frame, so clip it to the
+    /// enclosing scroll areas and window; otherwise text scrolled out of view gets underlined over other windows.
+    private func visibleFrame(of element: AXUIElement) -> CGRect? {
+        guard var visible = elementFrame(element) else { return nil }
+        var current = element
+        for _ in 0..<8 {
+            guard let parent = attribute(kAXParentAttribute, of: current), CFGetTypeID(parent) == AXUIElementGetTypeID() else { break }
+            current = parent as! AXUIElement
+            let role = attribute(kAXRoleAttribute, of: current) as? String
+            guard role == kAXScrollAreaRole as String || role == kAXWindowRole as String, let clip = elementFrame(current) else { continue }
+            visible = visible.intersection(clip)
+            if role == kAXWindowRole as String { break }
+        }
+        return visible.isNull || visible.isEmpty ? nil : visible
     }
 
     /// Accessibility uses a top-left origin on the primary display; AppKit windows use bottom-left.
