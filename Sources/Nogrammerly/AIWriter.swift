@@ -66,7 +66,7 @@ enum AIWriter {
             "replacement" must be what a fluent native speaker would naturally write (for example "he and I", not "I and he"). \
             Never report text that is already correct. Return an empty list if there are no problems.
             """)
-        guard let response = try? await session.respond(to: paragraph, schema: proofreadSchema, options: GenerationOptions(samplingMode: .greedy)),
+        guard let response = try? await session.respond(to: paragraph, schema: proofreadSchema, options: GenerationOptions(sampling: .greedy)),
               let issues = try? response.content.value([GeneratedContent].self, forProperty: "issues") else { return [] }
 
         let nsParagraph = paragraph as NSString
