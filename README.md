@@ -8,11 +8,12 @@ Powered by Apple Intelligence. Your writing never leaves your Mac.</p>
   <a href="https://github.com/gaurabh-pei/nogrammerly/releases/latest"><img src="https://img.shields.io/github/v/release/gaurabh-pei/nogrammerly?label=download&color=4f46e5" alt="Download"></a>
   <a href="https://github.com/gaurabh-pei/nogrammerly/actions/workflows/swift.yml"><img src="https://github.com/gaurabh-pei/nogrammerly/actions/workflows/swift.yml/badge.svg" alt="Build"></a>
   <img src="https://img.shields.io/badge/macOS-14%2B-black?logo=apple" alt="macOS 14+">
+  <a href="windows/README.md"><img src="https://img.shields.io/badge/Windows-10%2B%20(beta)-0078D4?logo=windows" alt="Windows 10+ (beta)"></a>
   <img src="https://img.shields.io/badge/Swift-native-F05138?logo=swift&logoColor=white" alt="Swift">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT license"></a>
 </p>
 
-<p align="center"><a href="https://github.com/gaurabh-pei/nogrammerly/releases/latest"><b>⬇ Download for Mac</b></a> · <a href="#how-it-works">How it works</a> · <a href="CONTRIBUTING.md">Contribute</a></p>
+<p align="center"><a href="https://github.com/gaurabh-pei/nogrammerly/releases/latest"><b>⬇ Download for Mac</b></a> · <a href="windows/README.md"><b>Windows (beta)</b></a> · <a href="#how-it-works">How it works</a> · <a href="CONTRIBUTING.md">Contribute</a></p>
 
 <p align="center"><img src="Assets/demo.gif" width="820" alt="Nogrammerly fixing spelling and wordiness with a right-click, then rewriting the message in a professional tone"></p>
 
@@ -53,6 +54,10 @@ Cloud writing assistants read everything you type, including private Slack DMs, 
 | macOS | 14 Sonoma or later, on Apple silicon |
 | AI checks & rewrites | macOS 26+ with Apple Intelligence turned on. Without it you still get spelling, grammar and style checks. |
 | Permission | Accessibility (System Settings › Privacy & Security › Accessibility) |
+
+### Windows (beta)
+
+A Windows version lives in [`windows/`](windows/README.md). It has the same underlines, right-click fixes, field button and rewrites. On Copilot+ PCs it can use Phi Silica, the on-device model built into Windows. See the [Windows install guide](windows/README.md).
 
 ## Build
 
