@@ -14,6 +14,8 @@ Powered by Apple Intelligence. Your writing never leaves your Mac.</p>
 
 <p align="center"><a href="https://github.com/gaurabh-pei/nogrammerly/releases/latest"><b>⬇ Download for Mac</b></a> · <a href="#how-it-works">How it works</a> · <a href="CONTRIBUTING.md">Contribute</a></p>
 
+<p align="center"><img src="Assets/demo.gif" width="820" alt="Nogrammerly fixing spelling and wordiness with a right-click, then rewriting the message in a professional tone"></p>
+
 ---
 
 ## Why Nogrammerly?
