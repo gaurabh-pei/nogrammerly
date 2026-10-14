@@ -11,3 +11,7 @@ Assets/Nogrammerly.icns
 Assets/Nogrammerly.iconset/
 
 .DS_Store
+
+# .NET build output (windows/)
+windows/**/bin/
+windows/**/obj/

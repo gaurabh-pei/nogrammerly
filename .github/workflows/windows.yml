@@ -1,0 +1,54 @@
+name: Windows
+
+on:
+  push:
+    branches: [ "main", "windows" ]
+    tags: [ "v*" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 10.0.x
+    - name: Test the writing engine
+      working-directory: windows
+      run: dotnet test --project Nogrammerly.Core.Tests
+    - name: Test the spell checker and UI Automation
+      working-directory: windows
+      run: dotnet test --project Nogrammerly.Tests
+
+  package:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        arch: [ x64, arm64 ]
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 10.0.x
+    - name: Publish
+      run: dotnet publish windows/Nogrammerly -c Release -r win-${{ matrix.arch }} -o out/Nogrammerly
+    - name: Package
+      shell: pwsh
+      run: |
+        $manifest = 'out/Nogrammerly/AppxManifest.xml'
+        (Get-Content $manifest -Raw) -replace 'ProcessorArchitecture="x64"', 'ProcessorArchitecture="${{ matrix.arch }}"' | Set-Content $manifest -NoNewline
+        Compress-Archive -Path out/Nogrammerly -DestinationPath Nogrammerly-Windows-${{ matrix.arch }}.zip
+    - uses: actions/upload-artifact@v4
+      with:
+        name: Nogrammerly-Windows-${{ matrix.arch }}
+        path: Nogrammerly-Windows-${{ matrix.arch }}.zip
+    - name: Attach to release
+      if: startsWith(github.ref, 'refs/tags/v')
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: gh release upload ${{ github.ref_name }} Nogrammerly-Windows-${{ matrix.arch }}.zip --clobber
