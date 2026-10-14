@@ -43,7 +43,7 @@ jobs:
         $manifest = 'out/Nogrammerly/AppxManifest.xml'
         (Get-Content $manifest -Raw) -replace 'ProcessorArchitecture="x64"', 'ProcessorArchitecture="${{ matrix.arch }}"' | Set-Content $manifest -NoNewline
         Compress-Archive -Path out/Nogrammerly -DestinationPath Nogrammerly-Windows-${{ matrix.arch }}.zip
-    - uses: actions/upload-artifact@v5
+    - uses: actions/upload-artifact@v6
       with:
         name: Nogrammerly-Windows-${{ matrix.arch }}
         path: Nogrammerly-Windows-${{ matrix.arch }}.zip
