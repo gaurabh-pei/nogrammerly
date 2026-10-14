@@ -50,6 +50,7 @@ Because the app isn't notarized, macOS may say it "cannot be opened". If so, go 
 ./script/build_and_run.sh --bundle   # build only
 ./script/build_and_run.sh --logs     # launch and stream logs
 ./script/create_dmg.sh               # build dist/Nogrammerly-Installer.dmg
+swift test                           # run the WritingEngine tests (also run by GitHub Actions)
 ```
 
 The icon is generated from `Assets/Nogrammerly-icon.png` (a 1024×1024 image with square edges that fills the whole canvas). `script/create_icon.sh` masks it to the macOS rounded-square shape and builds the `.icns`.
