@@ -1,0 +1,13 @@
+# SwiftPM build output
+.build/
+.swiftpm/
+
+# Built app and installer (script/build_and_run.sh, script/create_dmg.sh)
+dist/
+
+# Generated from Assets/Nogrammerly-icon.png by script/create_icon.sh
+Assets/AppIcon.png
+Assets/Nogrammerly.icns
+Assets/Nogrammerly.iconset/
+
+.DS_Store
