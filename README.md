@@ -162,24 +162,24 @@ Nogrammerly works the way system-wide checkers like Grammarly Desktop do. Every 
 
 ```mermaid
 flowchart LR
-    type(["⌨️ You type<br/>in any app"]) --> read["👀 Read<br/>the focused text field"]
-    read --> analyse["🧠 Analyse<br/>spelling · rules · on-device AI"]
-    analyse --> draw["〰️ Draw<br/>coloured underlines"]
-    draw --> click["🖱️ Right-click<br/>an underline"]
-    click --> replace(["✅ Replace<br/>and ⌘Z still works"])
+    s1(["⌨️ You type<br/>in any app"]) --> s2["👀 Read<br/>the focused text field"]
+    s2 --> s3["🧠 Analyse<br/>spelling · rules · on-device AI"]
+    s3 --> s4["〰️ Draw<br/>coloured underlines"]
+    s4 --> s5["🖱️ Right-click<br/>an underline"]
+    s5 --> s6(["✅ Replace<br/>and ⌘Z still works"])
 
     classDef you fill:#ede9fe,stroke:#7c5cff,stroke-width:2px,color:#1f2340
-    classDef read fill:#dbeafe,stroke:#3b82f6,stroke-width:2px,color:#1f2340
-    classDef think fill:#fae8ff,stroke:#a855f7,stroke-width:2px,color:#1f2340
-    classDef draw fill:#ffedd5,stroke:#f59e0b,stroke-width:2px,color:#1f2340
-    classDef act fill:#fee2e2,stroke:#e5484d,stroke-width:2px,color:#1f2340
+    classDef reading fill:#dbeafe,stroke:#3b82f6,stroke-width:2px,color:#1f2340
+    classDef thinking fill:#fae8ff,stroke:#a855f7,stroke-width:2px,color:#1f2340
+    classDef drawing fill:#ffedd5,stroke:#f59e0b,stroke-width:2px,color:#1f2340
+    classDef acting fill:#fee2e2,stroke:#e5484d,stroke-width:2px,color:#1f2340
     classDef done fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#1f2340
-    class type you
-    class read read
-    class analyse think
-    class draw draw
-    class click act
-    class replace done
+    class s1 you
+    class s2 reading
+    class s3 thinking
+    class s4 drawing
+    class s5 acting
+    class s6 done
 ```
 
 Here is the Mac version; the Windows version follows the same steps with Windows APIs (see the table below).
