@@ -12,6 +12,8 @@ final class SystemWritingAssistant: NSObject, NSMenuDelegate {
     private var permissionTimer: Timer?
     private var eventTap: CFMachPort?
     private var swallowNextRightMouseUp = false
+    /// Set by "Show <app> menu" so the replayed right-click reaches the app instead of opening our menu again.
+    private var passNextRightClick = false
     private var element: AXUIElement?
     private var text = ""
     private var suggestions: [WritingSuggestion] = []
@@ -20,6 +22,10 @@ final class SystemWritingAssistant: NSObject, NSMenuDelegate {
     private var proofreadTask: Task<Void, Never>?
     private let overlay = UnderlineOverlay()
     private lazy var fieldButton = FieldButtonPanel { [weak self] in self?.showFieldMenu() }
+    private let rewritePanel = RewritePanel()
+    /// The selection a right-click landed on; `rect` is in Accessibility screen coordinates.
+    private struct Selection { let element: AXUIElement; let range: NSRange; let text: String; let rect: CGRect; let location: CGPoint }
+    private var menuSelection: Selection?
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     var onStateChange: ((String) -> Void)?
     var onOpenApp: (() -> Void)?
@@ -62,6 +68,7 @@ final class SystemWritingAssistant: NSObject, NSMenuDelegate {
         pollTimer?.invalidate(); pollTimer = nil
         permissionTimer?.invalidate(); permissionTimer = nil
         if let eventTap { CGEvent.tapEnable(tap: eventTap, enable: false) }
+        rewritePanel.close()
         NSWorkspace.shared.notificationCenter.removeObserver(self)
         reset()
         report("Everywhere mode is paused.")
@@ -175,7 +182,14 @@ final class SystemWritingAssistant: NSObject, NSMenuDelegate {
             if let eventTap, isRunning { CGEvent.tapEnable(tap: eventTap, enable: true) }
             return false
         case .rightMouseDown:
-            guard isRunning, let hit = marks.first(where: { $0.rect.insetBy(dx: -2, dy: -4).contains(location) }) else { return false }
+            if passNextRightClick { passNextRightClick = false; return false }
+            guard isRunning else { return false }
+            if let selection = selection(under: location) {
+                swallowNextRightMouseUp = true
+                DispatchQueue.main.async { [weak self] in self?.showSelectionMenu(for: selection) }
+                return true
+            }
+            guard let hit = marks.first(where: { $0.rect.insetBy(dx: -2, dy: -4).contains(location) }) else { return false }
             swallowNextRightMouseUp = true
             DispatchQueue.main.async { [weak self] in self?.showMenu(for: hit.suggestion) }
             return true
@@ -184,6 +198,55 @@ final class SystemWritingAssistant: NSObject, NSMenuDelegate {
             return swallowNextRightMouseUp
         default:
             return false
+        }
+    }
+
+    /// The focused field's selection, if a right-click at `location` lands on it.
+    private func selection(under location: CGPoint) -> Selection? {
+        guard let element, let range = selectedRange(of: element), range.length > 0,
+              let rect = bounds(of: range, in: element), rect.insetBy(dx: -2, dy: -4).contains(location),
+              let value = stringValue(of: element), NSMaxRange(range) <= (value as NSString).length else { return nil }
+        return Selection(element: element, range: range, text: (value as NSString).substring(with: range), rect: rect, location: location)
+    }
+
+    /// Right-click on selected text: rewrite it, act on issues inside it, or fall through to the app's own menu.
+    private func showSelectionMenu(for selection: Selection) {
+        menuSelection = selection
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        let rewrite = menu.addItem(withTitle: "✦ Rewrite…", action: #selector(rewriteSelectionWithStyle), keyEquivalent: "")
+        rewrite.target = self
+        let inside = suggestions.filter { NSIntersectionRange($0.range, selection.range).length > 0 }
+        if !inside.isEmpty {
+            menu.addItem(.separator())
+            addSuggestionSubmenus(inside, to: menu)
+        }
+        menu.addItem(.separator())
+        let copy = menu.addItem(withTitle: "Copy", action: #selector(copySelection), keyEquivalent: "")
+        copy.target = self
+        let appName = NSWorkspace.shared.frontmostApplication?.localizedName ?? "App"
+        let native = menu.addItem(withTitle: "Show \(appName) Menu", action: #selector(showNativeMenu), keyEquivalent: "")
+        native.target = self
+        menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+    }
+
+    @objc private func rewriteSelectionWithStyle() {
+        guard let selection = menuSelection else { return }
+        presentRewrite(of: selection.text, range: selection.range, in: selection.element, near: selection.rect, tone: nil)
+    }
+
+    @objc private func copySelection() {
+        guard let selection = menuSelection else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(selection.text, forType: .string)
+    }
+
+    /// Replays the right-click so the app shows its usual menu (Look Up, Services and so on).
+    @objc private func showNativeMenu() {
+        guard let location = menuSelection?.location else { return }
+        passNextRightClick = true
+        for type in [CGEventType.rightMouseDown, .rightMouseUp] {
+            CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: location, mouseButton: .right)?.post(tap: .cghidEventTap)
         }
     }
 
@@ -251,6 +314,8 @@ final class SystemWritingAssistant: NSObject, NSMenuDelegate {
         menu.addItem(.separator())
         let toggle = menu.addItem(withTitle: isRunning ? "Pause everywhere mode" : "Enable everywhere", action: #selector(toggle), keyEquivalent: "")
         toggle.target = self
+        let login = menu.addItem(withTitle: "Launch at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
+        login.target = self; login.state = LaunchAtLogin.isEnabled ? .on : .off
         let open = menu.addItem(withTitle: "Open Nogrammerly", action: #selector(openApp), keyEquivalent: "")
         open.target = self
         let setup = menu.addItem(withTitle: "Setup Guide…", action: #selector(openSetup), keyEquivalent: "")
@@ -261,6 +326,15 @@ final class SystemWritingAssistant: NSObject, NSMenuDelegate {
 
     /// Suggestions for the focused field plus rewrite actions; shared by the floating field button and the menu-bar icon.
     private func addFieldItems(to menu: NSMenu) {
+        addSuggestionSubmenus(suggestions, to: menu)
+        if !suggestions.isEmpty { menu.addItem(.separator()) }
+        if let element, let selection = selectedRange(of: element), selection.length > 0 {
+            menu.addItem(toneMenu("Rewrite selection", #selector(rewriteSelection(_:)), nil))
+        }
+        menu.addItem(toneMenu("Rewrite entire text", #selector(rewriteAll(_:)), nil))
+    }
+
+    private func addSuggestionSubmenus(_ suggestions: [WritingSuggestion], to menu: NSMenu) {
         for suggestion in suggestions.prefix(15) {
             let item = NSMenuItem(title: "\(suggestion.original.prefix(40)) — \(suggestion.title)", action: nil, keyEquivalent: "")
             let submenu = NSMenu()
@@ -269,11 +343,6 @@ final class SystemWritingAssistant: NSObject, NSMenuDelegate {
             item.submenu = submenu
             menu.addItem(item)
         }
-        if !suggestions.isEmpty { menu.addItem(.separator()) }
-        if let element, let selection = selectedRange(of: element), selection.length > 0 {
-            menu.addItem(toneMenu("Rewrite selection", #selector(rewriteSelection(_:)), nil))
-        }
-        menu.addItem(toneMenu("Rewrite entire text", #selector(rewriteAll(_:)), nil))
     }
 
     private func showFieldMenu() {
@@ -289,6 +358,7 @@ final class SystemWritingAssistant: NSObject, NSMenuDelegate {
 
     @objc private func toggle() { isRunning ? stop() : start() }
     @objc private func openApp() { onOpenApp?() }
+    @objc private func toggleLaunchAtLogin() { if let message = LaunchAtLogin.toggle() { report(message) } }
     @objc private func openSetup() { onOpenSetup?() }
 
     // MARK: Actions
@@ -335,13 +405,16 @@ final class SystemWritingAssistant: NSObject, NSMenuDelegate {
     }
 
     private func rewrite(range: NSRange, in element: AXUIElement, tone: WritingTone) {
-        let original = (text as NSString).substring(with: range)
-        statusItem.button?.title = "✦ …"
-        Task { [weak self] in
-            let rewritten = await AIWriter.rewrite(original, tone: tone) ?? WritingEngine.rewrite(original, tone: tone)
-            guard let self else { return }
-            self.replaceText(in: element, range: range, expected: original, with: rewritten)
-            self.layoutMarks()
+        let anchor = bounds(of: range, in: element).flatMap { rect in visibleFrame(of: element)?.intersection(rect) }.flatMap { $0.isEmpty ? nil : $0 }
+            ?? visibleFrame(of: element) ?? CGRect(origin: NSEvent.mouseLocation, size: .zero)
+        presentRewrite(of: (text as NSString).substring(with: range), range: range, in: element, near: anchor, tone: tone)
+    }
+
+    /// Every rewrite is previewed first; nothing is replaced until the user accepts it.
+    private func presentRewrite(of original: String, range: NSRange, in element: AXUIElement, near rect: CGRect, tone: WritingTone?) {
+        rewritePanel.present(original: original, near: toCocoa(rect), tone: tone) { [weak self] rewritten in
+            self?.replaceText(in: element, range: range, expected: original, with: rewritten)
+            self?.layoutMarks()
         }
     }
 

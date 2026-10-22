@@ -3,7 +3,7 @@ import ApplicationServices
 
 @main
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource, NSTableViewDelegate, NSTextViewDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource, NSTableViewDelegate, NSTextViewDelegate, NSMenuItemValidation {
     private var window: NSWindow!
     private let editor = NSTextView()
     private let suggestionTable = NSTableView()
@@ -43,12 +43,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource,
         }
         systemAssistant.onOpenApp = { [weak self] in self?.showWindow() }
         systemAssistant.onOpenSetup = { [weak self] in self?.showSetup() }
-        refreshAnalysis()
         if AXIsProcessTrusted() {
             systemAssistant.start()
         } else {
             DispatchQueue.main.async { [weak self] in self?.showSetup() }
         }
+        // Right after login the spell server may not be up yet; NSSpellChecker then raises an Objective-C
+        // exception that AppKit swallows, skipping the rest of this method. Analyse the sample text last,
+        // on a later run-loop pass, so it can never stop everywhere mode from starting.
+        DispatchQueue.main.async { [weak self] in self?.refreshAnalysis() }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -167,6 +170,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource,
 
     @objc private func showSetup() { setup.present() }
 
+    @objc private func toggleLaunchAtLogin() { if let message = LaunchAtLogin.toggle() { statusLabel.stringValue = message } }
+
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(toggleLaunchAtLogin) { menuItem.state = LaunchAtLogin.isEnabled ? .on : .off }
+        return true
+    }
+
     private func makeMainMenu() -> NSMenu {
         let main = NSMenu()
         func submenu(_ title: String, _ items: [NSMenuItem]) {
@@ -185,6 +195,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource,
         submenu("Nogrammerly", [
             item("About Nogrammerly", #selector(NSApplication.orderFrontStandardAboutPanel(_:))),
             item("Setup Guide…", #selector(showSetup), target: self),
+            item("Launch at Login", #selector(toggleLaunchAtLogin), target: self),
             .separator(),
             item("Hide Nogrammerly", #selector(NSApplication.hide(_:)), "h"),
             item("Hide Others", #selector(NSApplication.hideOtherApplications(_:)), "h", [.command, .option]),
