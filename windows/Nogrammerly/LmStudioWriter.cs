@@ -48,9 +48,9 @@ internal sealed class LmStudioWriter : IDisposable
             var body = $$"""{"model":{{JsonSerializer.Serialize(settings.ModelId)}},"messages":[{"role":"user","content":{{JsonSerializer.Serialize(Proofreading.ProofreadPrompt(paragraph))}}}],"response_format":{{IssuesFormat}}}""";
             var content = await PostForContentAsync(settings.BaseUrl, body, token);
             if (content is null) return [];
-            // ponytail: cheap shape check only for an accurate LastError; ParseStructuredIssues still enforces every bound.
-            if (!HasIssuesShape(content)) { LastError = "malformed reply"; return []; }
-            foreach (var suggestion in Proofreading.ParseStructuredIssues(content, paragraph))
+            var parsed = Proofreading.ParseStructuredIssues(content, paragraph, out var valid);
+            if (!valid) { LastError = "malformed reply"; return []; }
+            foreach (var suggestion in parsed)
                 found.Add(suggestion with { Span = new TextSpan(suggestion.Span.Start + span.Start, suggestion.Span.Length) });
         }
         LastError = null;
@@ -148,16 +148,6 @@ internal sealed class LmStudioWriter : IDisposable
         catch (JsonException) { return null; }
     }
 
-    private static bool HasIssuesShape(string json)
-    {
-        try
-        {
-            using var doc = JsonDocument.Parse(json);
-            return doc.RootElement.ValueKind == JsonValueKind.Object
-                && doc.RootElement.TryGetProperty("issues", out var issues) && issues.ValueKind == JsonValueKind.Array;
-        }
-        catch (JsonException) { return false; }
-    }
 
     private static IReadOnlyList<string>? ReadModelIds(string json)
     {

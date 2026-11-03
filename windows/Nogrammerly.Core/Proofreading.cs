@@ -85,8 +85,13 @@ public static class Proofreading
     /// violation (30 items, 500-char strings, known kind, verbatim locatable original) rejects the
     /// whole payload rather than guessing at parts of it.
     /// </summary>
-    public static IReadOnlyList<WritingSuggestion> ParseStructuredIssues(string json, string paragraph)
+    public static IReadOnlyList<WritingSuggestion> ParseStructuredIssues(string json, string paragraph) =>
+        ParseStructuredIssues(json, paragraph, out _);
+
+    /// <summary>Reports whether the entire reply was valid, including a legitimate empty issues array.</summary>
+    public static IReadOnlyList<WritingSuggestion> ParseStructuredIssues(string json, string paragraph, out bool valid)
     {
+        valid = false;
         const int MaxItems = 30, MaxFieldLength = 500; // ponytail: fixed schema bounds; promote to consts if the writer needs them
         JsonElement root;
         try { root = JsonDocument.Parse(json).RootElement; }
@@ -115,6 +120,7 @@ public static class Proofreading
             suggestions.Add(new WritingSuggestion(kind, explanation, $"Replace “{original}” with “{replacement}”.",
                 paragraph.Substring(found.Start, found.Length), replacement, found));
         }
+        valid = true;
         return suggestions;
     }
 

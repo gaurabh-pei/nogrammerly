@@ -228,6 +228,33 @@ public class LmStudioWriterTests
         JsonSerializer.Serialize(new { choices = new[] { new { message = new { content } } } });
 
     private const string OneIssue = """{"issues":[{"original":"recieve","replacement":"receive","kind":"correctness","explanation":"Misspelling."}]}""";
+    [Fact]
+    public async Task ProofreadPositionsSecondParagraphInDocument()
+    {
+        using var server = new FakeHttpServer();
+        server.Responder = request => (200, Chat(request.Body.Contains("recieve") ? OneIssue : """{"issues":[]}"""), "application/json", null);
+        server.Start();
+        using var writer = new LmStudioWriter();
+
+        var result = await writer.ProofreadAsync("First.\nWe recieve mail.", Settings(server), default);
+
+        Assert.Equal(new TextSpan(10, 7), Assert.Single(result).Span);
+        Assert.Equal(2, server.Requests.Count);
+    }
+
+    [Theory]
+    [InlineData("""{"issues":[{"original":"absent","replacement":"present","kind":"correctness","explanation":"No match."}]}""")]
+    [InlineData("""{"issues":[{"original":"recieve","replacement":"receive","kind":"99","explanation":"Bad kind."}]}""")]
+    public async Task ProofreadReportsRejectedIssuesAsMalformed(string reply)
+    {
+        using var server = new FakeHttpServer();
+        server.Responder = _ => (200, Chat(reply), "application/json", null);
+        server.Start();
+        using var writer = new LmStudioWriter();
+
+        Assert.Empty(await writer.ProofreadAsync("We recieve mail.", Settings(server), default));
+        Assert.Equal("malformed reply", writer.LastError);
+    }
 
     [Fact]
     public async Task ProofreadPostsSelectedModelAndSchemaAndPositionsSuggestions()
@@ -457,6 +484,8 @@ public class LmStudioWriterTests
         var broken = new AppSettings(AiProvider.LmStudio, server.BaseUrl, "");
 
         Assert.Empty(await writer.ProofreadAsync("We recieve mail.", broken, default));
+        Assert.Equal("invalid settings", writer.LastError);
+        Assert.Null(await writer.RewriteAsync("We recieve mail.", WritingTone.Friendly, broken, default));
         Assert.Equal("invalid settings", writer.LastError);
         Assert.Empty(await writer.ModelsAsync(broken, default));
         Assert.Equal(0, Volatile.Read(ref server.Connections));
