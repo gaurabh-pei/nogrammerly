@@ -58,6 +58,7 @@ public static class Proofreading
         JsonElement root;
         try { root = JsonDocument.Parse(reply[start..(end + 1)]).RootElement; }
         catch (JsonException) { return []; }
+        if (root.ValueKind != JsonValueKind.Array) return []; // defensive: extraction always yields an array when it parses
 
         var claimed = new List<TextSpan>();
         var suggestions = new List<WritingSuggestion>();
@@ -73,6 +74,43 @@ public static class Proofreading
             claimed.Add(found);
             var kind = Enum.TryParse<SuggestionKind>(Read(issue, "kind"), ignoreCase: true, out var parsed) ? parsed : SuggestionKind.Correctness;
             var explanation = Read(issue, "explanation") is { Length: > 0 } text ? text : "Suggested improvement.";
+            suggestions.Add(new WritingSuggestion(kind, explanation, $"Replace “{original}” with “{replacement}”.",
+                paragraph.Substring(found.Start, found.Length), replacement, found));
+        }
+        return suggestions;
+    }
+
+    /// <summary>
+    /// Strict decode of a structured-output reply: a root object with an `issues` array. Any bound
+    /// violation (30 items, 500-char strings, known kind, verbatim locatable original) rejects the
+    /// whole payload rather than guessing at parts of it.
+    /// </summary>
+    public static IReadOnlyList<WritingSuggestion> ParseStructuredIssues(string json, string paragraph)
+    {
+        const int MaxItems = 30, MaxFieldLength = 500; // ponytail: fixed schema bounds; promote to consts if the writer needs them
+        JsonElement root;
+        try { root = JsonDocument.Parse(json).RootElement; }
+        catch (JsonException) { return []; }
+        if (root.ValueKind != JsonValueKind.Object
+            || !root.TryGetProperty("issues", out var issues)
+            || issues.ValueKind != JsonValueKind.Array
+            || issues.GetArrayLength() > MaxItems) return [];
+
+        var claimed = new List<TextSpan>();
+        var suggestions = new List<WritingSuggestion>();
+        foreach (var issue in issues.EnumerateArray())
+        {
+            if (issue.ValueKind != JsonValueKind.Object) return [];
+            var original = Read(issue, "original");
+            var replacement = Read(issue, "replacement");
+            var explanation = Read(issue, "explanation");
+            if (original is not { Length: > 0 and <= MaxFieldLength } || replacement is not { Length: <= MaxFieldLength }
+                || explanation is not { Length: <= MaxFieldLength }
+                || !Enum.TryParse<SuggestionKind>(Read(issue, "kind"), ignoreCase: true, out var kind)) return [];
+            TextSpan? span = WritingEngine.WordSpans(original, paragraph).Cast<TextSpan?>().FirstOrDefault(c => !claimed.Any(k => k.Overlaps(c!.Value)))
+                ?? ExactSpan(original, paragraph, claimed);
+            if (span is not { } found) return [];
+            claimed.Add(found);
             suggestions.Add(new WritingSuggestion(kind, explanation, $"Replace “{original}” with “{replacement}”.",
                 paragraph.Substring(found.Start, found.Length), replacement, found));
         }
