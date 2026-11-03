@@ -105,8 +105,9 @@ public static class Proofreading
             var replacement = Read(issue, "replacement");
             var explanation = Read(issue, "explanation");
             if (original is not { Length: > 0 and <= MaxFieldLength } || replacement is not { Length: <= MaxFieldLength }
-                || explanation is not { Length: <= MaxFieldLength }
-                || !Enum.TryParse<SuggestionKind>(Read(issue, "kind"), ignoreCase: true, out var kind)) return [];
+                || explanation is not { Length: <= MaxFieldLength } || original == replacement
+                || !Enum.TryParse<SuggestionKind>(Read(issue, "kind"), ignoreCase: true, out var kind)
+                || !Enum.IsDefined(kind)) return [];
             TextSpan? span = WritingEngine.WordSpans(original, paragraph).Cast<TextSpan?>().FirstOrDefault(c => !claimed.Any(k => k.Overlaps(c!.Value)))
                 ?? ExactSpan(original, paragraph, claimed);
             if (span is not { } found) return [];
