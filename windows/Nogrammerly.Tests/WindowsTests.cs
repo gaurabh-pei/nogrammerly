@@ -1,11 +1,18 @@
+#if WINDOWS
 using System.Diagnostics;
 using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Definitions;
 using FlaUI.UIA3;
+#endif
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
+using System.Text.Json;
 using Nogrammerly;
 using Nogrammerly.Core;
 using Xunit;
 
+#if WINDOWS
 public class SpellCheckerTests
 {
     [Fact]
@@ -22,6 +29,7 @@ public class SpellCheckerTests
     [Fact]
     public void CleanTextHasNoIssues() => Assert.Empty(new SpellChecker("en-US").Check("The report is ready."));
 }
+#endif
 
 public class AppSettingsTests
 {
@@ -145,6 +153,318 @@ public class AppSettingsTests
     }
 }
 
+/// <summary>
+/// Loopback HTTP fake: records requests and replays a scripted response, or hands the raw
+/// socket to the test for truncation/stall cases. Synthetic content only.
+/// </summary>
+internal sealed class FakeHttpServer : IDisposable
+{
+    internal record Request(string Method, string Path, string Body);
+
+    private readonly TcpListener listener = new(IPAddress.Loopback, 0);
+
+    public List<Request> Requests { get; } = [];
+    public int Connections;
+    public Func<Request, (int Status, string Body, string ContentType, string? Location)> Responder = _ => (200, "{}", "application/json", null);
+    public Action<NetworkStream>? RawHandler;
+
+    public string BaseUrl => $"http://127.0.0.1:{((IPEndPoint)listener.LocalEndpoint).Port}/v1";
+
+    public void Start()
+    {
+        listener.Start();
+        _ = Task.Run(async () =>
+        {
+            while (listener.Server.IsBound)
+            {
+                TcpClient client;
+                try { client = await listener.AcceptTcpClientAsync(); }
+                catch (Exception) { return; }
+                Interlocked.Increment(ref Connections);
+                _ = Task.Run(() => { try { Serve(client); } catch (Exception) { } }); // client may hang up early (oversize/timeout tests)
+            }
+        });
+    }
+
+    private void Serve(TcpClient client)
+    {
+        using (client)
+        using (var stream = client.GetStream())
+        {
+            if (RawHandler is not null) { RawHandler(stream); return; }
+            var reader = new StreamReader(stream, Encoding.UTF8, leaveOpen: true);
+            var parts = (reader.ReadLine() ?? "").Split(' ');
+            var length = 0;
+            while (reader.ReadLine() is { } header && header.Length > 0)
+                if (header.StartsWith("Content-Length:", StringComparison.OrdinalIgnoreCase))
+                    length = int.Parse(header[15..].Trim());
+            // ponytail: JsonSerializer escapes request bodies to ASCII, so chars == bytes here.
+            var chars = new char[length];
+            var read = 0;
+            while (read < length) { var n = reader.ReadBlock(chars, read, length - read); if (n == 0) break; read += n; }
+            var request = new Request(parts.Length > 1 ? parts[0] : "", parts.Length > 1 ? parts[1] : "", new string(chars, 0, read));
+            lock (Requests) Requests.Add(request);
+            var (status, body, contentType, location) = Responder(request);
+            var payload = Encoding.UTF8.GetBytes(body);
+            var head = $"HTTP/1.1 {status} Fake\r\nContent-Type: {contentType}\r\n"
+                + (location is null ? "" : $"Location: {location}\r\n")
+                + $"Content-Length: {payload.Length}\r\nConnection: close\r\n\r\n";
+            var headerBytes = Encoding.UTF8.GetBytes(head);
+            stream.Write(headerBytes, 0, headerBytes.Length);
+            stream.Write(payload, 0, payload.Length);
+        }
+    }
+
+    public void Dispose() => listener.Stop();
+}
+
+public class LmStudioWriterTests
+{
+    // The writer's own timeout/cancellation semantics are under test, so these calls pass explicit tokens.
+#pragma warning disable xUnit1051
+    private static AppSettings Settings(FakeHttpServer server) => new(AiProvider.LmStudio, server.BaseUrl, "test-model");
+
+    private static string Chat(string? content) =>
+        JsonSerializer.Serialize(new { choices = new[] { new { message = new { content } } } });
+
+    private const string OneIssue = """{"issues":[{"original":"recieve","replacement":"receive","kind":"correctness","explanation":"Misspelling."}]}""";
+
+    [Fact]
+    public async Task ProofreadPostsSelectedModelAndSchemaAndPositionsSuggestions()
+    {
+        using var server = new FakeHttpServer();
+        server.Responder = _ => (200, Chat(OneIssue), "application/json", null);
+        server.Start();
+        using var writer = new LmStudioWriter();
+
+        var result = await writer.ProofreadAsync("We recieve mail.", Settings(server), default);
+
+        var suggestion = Assert.Single(result);
+        Assert.Equal(new TextSpan(3, 7), suggestion.Span);
+        Assert.Equal("receive", suggestion.Replacement);
+        Assert.Null(writer.LastError);
+
+        var request = Assert.Single(server.Requests);
+        Assert.Equal("POST", request.Method);
+        Assert.Equal("/v1/chat/completions", request.Path);
+        using var doc = JsonDocument.Parse(request.Body);
+        Assert.Equal("test-model", doc.RootElement.GetProperty("model").GetString());
+        Assert.Contains("We recieve mail.", doc.RootElement.GetProperty("messages")[0].GetProperty("content").GetString());
+        var format = doc.RootElement.GetProperty("response_format");
+        Assert.Equal("json_schema", format.GetProperty("type").GetString());
+        Assert.Equal("issues", format.GetProperty("json_schema").GetProperty("name").GetString());
+        Assert.True(format.GetProperty("json_schema").GetProperty("strict").GetBoolean());
+        var item = format.GetProperty("json_schema").GetProperty("schema")
+            .GetProperty("properties").GetProperty("issues").GetProperty("items");
+        var required = item.GetProperty("required").EnumerateArray().Select(e => e.GetString()).ToList();
+        Assert.Equal(new[] { "original", "replacement", "kind", "explanation" }, required);
+        Assert.False(item.GetProperty("additionalProperties").GetBoolean());
+    }
+
+    [Theory]
+    [InlineData("not json at all")]
+    [InlineData("[]")]
+    [InlineData("""{"issues":"nope"}""")]
+    public async Task ProofreadRejectsMalformedStructuredReplies(string reply)
+    {
+        using var server = new FakeHttpServer();
+        server.Responder = _ => (200, Chat(reply), "application/json", null);
+        server.Start();
+        using var writer = new LmStudioWriter();
+
+        Assert.Empty(await writer.ProofreadAsync("We recieve mail.", Settings(server), default));
+        Assert.Equal("malformed reply", writer.LastError);
+    }
+
+    [Fact]
+    public async Task ProofreadRejectsNullContent()
+    {
+        using var server = new FakeHttpServer();
+        server.Responder = _ => (200, Chat(null), "application/json", null);
+        server.Start();
+        using var writer = new LmStudioWriter();
+
+        Assert.Empty(await writer.ProofreadAsync("We recieve mail.", Settings(server), default));
+        Assert.Equal("malformed reply", writer.LastError);
+    }
+
+    [Fact]
+    public async Task ModelsListsIdsFromGetModels()
+    {
+        using var server = new FakeHttpServer();
+        server.Responder = _ => (200, """{"data":[{"id":"alpha"},{"id":"beta"}]}""", "application/json", null);
+        server.Start();
+        using var writer = new LmStudioWriter();
+
+        var ids = await writer.ModelsAsync(Settings(server), default);
+
+        Assert.Equal(new[] { "alpha", "beta" }, ids);
+        Assert.Null(writer.LastError);
+        var request = Assert.Single(server.Requests);
+        Assert.Equal("GET", request.Method);
+        Assert.Equal("/v1/models", request.Path);
+    }
+
+    [Theory]
+    [InlineData("not json")]
+    [InlineData("""{"data":"nope"}""")]
+    [InlineData("""{"data":[{"nope":1}]}""")]
+    public async Task ModelsRejectsMalformedPayloads(string body)
+    {
+        using var server = new FakeHttpServer();
+        server.Responder = _ => (200, body, "application/json", null);
+        server.Start();
+        using var writer = new LmStudioWriter();
+
+        Assert.Empty(await writer.ModelsAsync(Settings(server), default));
+        Assert.Equal("malformed reply", writer.LastError);
+    }
+
+    [Fact]
+    public async Task RewriteCleansFencedReply()
+    {
+        using var server = new FakeHttpServer();
+        server.Responder = _ => (200, Chat("```\nRewritten sentence.\n```"), "application/json", null);
+        server.Start();
+        using var writer = new LmStudioWriter();
+
+        var rewrite = await writer.RewriteAsync("Original sentence.", WritingTone.Friendly, Settings(server), default);
+
+        Assert.Equal("Rewritten sentence.", rewrite);
+        Assert.Null(writer.LastError);
+        var request = Assert.Single(server.Requests);
+        Assert.Equal("POST", request.Method);
+        Assert.Equal("/v1/chat/completions", request.Path);
+        using var doc = JsonDocument.Parse(request.Body);
+        Assert.Equal("test-model", doc.RootElement.GetProperty("model").GetString());
+        Assert.Contains("warm, friendly", doc.RootElement.GetProperty("messages")[0].GetProperty("content").GetString());
+    }
+
+    [Fact]
+    public async Task RewriteRejectsBlankContent()
+    {
+        using var server = new FakeHttpServer();
+        server.Responder = _ => (200, Chat("   "), "application/json", null);
+        server.Start();
+        using var writer = new LmStudioWriter();
+
+        Assert.Null(await writer.RewriteAsync("Original sentence.", WritingTone.Professional, Settings(server), default));
+        Assert.Equal("malformed reply", writer.LastError);
+    }
+
+    [Fact]
+    public async Task HttpErrorYieldsNoResult()
+    {
+        using var server = new FakeHttpServer();
+        server.Responder = _ => (500, "boom", "text/plain", null);
+        server.Start();
+        using var writer = new LmStudioWriter();
+
+        Assert.Empty(await writer.ProofreadAsync("We recieve mail.", Settings(server), default));
+        Assert.Equal("HTTP 500", writer.LastError);
+        Assert.DoesNotContain("127.0.0.1", writer.LastError);
+    }
+
+    [Fact]
+    public async Task OversizedResponseIsRejected()
+    {
+        using var server = new FakeHttpServer();
+        server.Responder = _ => (200, new string('x', 300_000), "application/json", null);
+        server.Start();
+        using var writer = new LmStudioWriter();
+
+        Assert.Empty(await writer.ProofreadAsync("We recieve mail.", Settings(server), default));
+        Assert.Equal("response too large", writer.LastError);
+    }
+
+    [Fact]
+    public async Task TruncatedResponseIsRejected()
+    {
+        using var server = new FakeHttpServer();
+        server.RawHandler = stream =>
+        {
+            var head = Encoding.UTF8.GetBytes("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 5000\r\n\r\n");
+            stream.Write(head, 0, head.Length);
+            var partial = Encoding.UTF8.GetBytes("""{"choices":[{"message":{"content":"cut""");
+            stream.Write(partial, 0, partial.Length);
+            stream.Close();
+        };
+        server.Start();
+        using var writer = new LmStudioWriter();
+
+        Assert.Empty(await writer.ProofreadAsync("We recieve mail.", Settings(server), default));
+        Assert.False(string.IsNullOrEmpty(writer.LastError));
+        Assert.DoesNotContain("recieve", writer.LastError);
+    }
+
+    [Fact]
+    public async Task RedirectIsNotFollowed()
+    {
+        using var target = new FakeHttpServer();
+        target.Start();
+        using var server = new FakeHttpServer();
+        server.Responder = _ => (302, "", "text/plain", target.BaseUrl + "/chat/completions");
+        server.Start();
+        using var writer = new LmStudioWriter();
+
+        Assert.Empty(await writer.ProofreadAsync("We recieve mail.", Settings(server), default));
+        Assert.Equal("HTTP 302", writer.LastError);
+        Assert.Single(server.Requests);
+        Assert.Equal(0, Volatile.Read(ref target.Connections)); // text never reached the redirect destination
+    }
+
+    [Fact]
+    public async Task TimeoutYieldsNoResult()
+    {
+        using var server = new FakeHttpServer();
+        server.RawHandler = _ => Thread.Sleep(5000); // accept, never answer
+        server.Start();
+        using var writer = new LmStudioWriter(TimeSpan.FromMilliseconds(300));
+
+        Assert.Empty(await writer.ProofreadAsync("We recieve mail.", Settings(server), default));
+        Assert.Equal("timeout", writer.LastError);
+    }
+
+    [Fact]
+    public async Task CancelledCallYieldsNoResult()
+    {
+        using var server = new FakeHttpServer();
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        server.RawHandler = stream =>
+        {
+            stream.ReadExactly(new byte[64]);
+            started.SetResult();
+            Thread.Sleep(5000);
+        };
+        server.Start();
+        using var writer = new LmStudioWriter();
+        using var cts = new CancellationTokenSource();
+
+        var call = writer.ProofreadAsync("We recieve mail.", Settings(server), cts.Token);
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        cts.Cancel();
+
+        Assert.Empty(await call);
+        Assert.Equal("cancelled", writer.LastError);
+    }
+
+    [Fact]
+    public async Task InvalidSettingsMakeNoRequest()
+    {
+        using var server = new FakeHttpServer();
+        server.Start();
+        using var writer = new LmStudioWriter();
+        var broken = new AppSettings(AiProvider.LmStudio, server.BaseUrl, "");
+
+        Assert.Empty(await writer.ProofreadAsync("We recieve mail.", broken, default));
+        Assert.Equal("invalid settings", writer.LastError);
+        Assert.Empty(await writer.ModelsAsync(broken, default));
+        Assert.Equal(0, Volatile.Read(ref server.Connections));
+    }
+#pragma warning restore xUnit1051
+}
+
+#if WINDOWS
 /// <summary>Reads and positions text in a real Notepad window through UI Automation.</summary>
 public class TextFieldTests : IDisposable
 {
@@ -197,3 +517,4 @@ public class TextFieldTests : IDisposable
         automation.Dispose();
     }
 }
+#endif
