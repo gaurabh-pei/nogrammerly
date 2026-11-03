@@ -100,6 +100,36 @@ public class AppSettingsTests
         finally { File.Delete(path); }
     }
 
+    [Theory]
+    [InlineData("""{"provider":"LmStudio","baseUrl":"http://127.0.0.1:1234/v1"}""")] // modelId missing
+    [InlineData("""{"provider":"LmStudio","baseUrl":"http://127.0.0.1:1234/v1","modelId":null}""")] // modelId null
+    public void MissingOrNullModelIdFallsBackToDefaultsWithNotice(string json)
+    {
+        var path = TempPath();
+        try
+        {
+            File.WriteAllText(path, json);
+            var loaded = AppSettings.Load(path, out var error);
+            Assert.Equal(AppSettings.Default, loaded);
+            Assert.False(string.IsNullOrWhiteSpace(error));
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public void UnknownNumericProviderFallsBackToDefaultsWithNotice()
+    {
+        var path = TempPath();
+        try
+        {
+            File.WriteAllText(path, """{"provider":99,"baseUrl":"http://127.0.0.1:1234/v1","modelId":"qwen3"}""");
+            var loaded = AppSettings.Load(path, out var error);
+            Assert.Equal(AppSettings.Default, loaded);
+            Assert.False(string.IsNullOrWhiteSpace(error));
+        }
+        finally { File.Delete(path); }
+    }
+
     [Fact]
     public void InvalidStoredSettingsCannotEnableLmStudio()
     {

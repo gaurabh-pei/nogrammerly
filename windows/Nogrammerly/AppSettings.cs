@@ -19,7 +19,7 @@ internal sealed record AppSettings(AiProvider Provider, string BaseUrl, string M
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
-        Converters = { new JsonStringEnumConverter() },
+        Converters = { new JsonStringEnumConverter((JsonNamingPolicy?)null, allowIntegerValues: false) },
         WriteIndented = true,
     };
 
@@ -34,7 +34,7 @@ internal sealed record AppSettings(AiProvider Provider, string BaseUrl, string M
             error = "Enter an absolute http(s) URL with a host and a /v1 path, with no credentials, query, or fragment.";
             return false;
         }
-        if (Provider == AiProvider.LmStudio && ModelId.Trim().Length == 0)
+        if (Provider == AiProvider.LmStudio && string.IsNullOrWhiteSpace(ModelId))
         {
             error = "LM Studio needs a model ID before it can be enabled.";
             return false;
