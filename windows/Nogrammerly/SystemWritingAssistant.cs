@@ -37,7 +37,6 @@ internal sealed class SystemWritingAssistant : IDisposable
     private readonly HashSet<string> ignored = [];
     private readonly int ownProcessId = Environment.ProcessId;
     private readonly LmStudioWriter lmStudio;
-    private readonly bool ownsLmStudio;
     private volatile bool running = true;
 
     // Worker-thread state.
@@ -65,13 +64,6 @@ internal sealed class SystemWritingAssistant : IDisposable
         worker = new Thread(Run) { IsBackground = true, Name = "UI Automation" };
         worker.SetApartmentState(ApartmentState.MTA);
         worker.Start();
-    }
-
-    // ponytail: keeps the tray compiling unchanged until task 4 wires the tray to pass both explicitly.
-    public SystemWritingAssistant()
-        : this(AppSettings.Load(AppSettings.ProductionPath, out _), new LmStudioWriter())
-    {
-        ownsLmStudio = true;
     }
 
     public bool IsRunning => running;
@@ -172,6 +164,7 @@ internal sealed class SystemWritingAssistant : IDisposable
     private void ScheduleProofread(string value)
     {
         proofread?.Cancel();
+        proofread?.Dispose(); // the previous pass is already cancelled; release its handle
         if (settings.Provider == AiProvider.RulesOnly) return; // no AI call at all
         if (settings.Provider == AiProvider.PhiSilica && !AIWriter.IsReady) return;
         var cancellation = proofread = new CancellationTokenSource();
@@ -277,7 +270,8 @@ internal sealed class SystemWritingAssistant : IDisposable
         rewrite?.Cancel();
         work.CompleteAdding();
         worker.Join(TimeSpan.FromSeconds(2));
-        if (ownsLmStudio) lmStudio.Dispose();
+        proofread?.Dispose();
+        rewrite?.Dispose();
     }
 }
 #endif

@@ -1,6 +1,6 @@
 # Nogrammerly for Windows (beta)
 
-The same free, on-device writing assistant as the Mac app, for Windows 10 and 11. It underlines spelling, grammar, clarity and style issues in almost any app, and you can right-click an underline to fix it. Nothing you type leaves your PC.
+The same free writing assistant as the Mac app, for Windows 10 and 11. It underlines spelling, grammar, clarity and style issues in almost any app, and you can right-click an underline to fix it. With the default providers — Phi Silica or rules only — nothing you type leaves your PC. The optional LM Studio provider sends text to a model server you configure on your own network.
 
 ## Install
 
@@ -31,6 +31,26 @@ Windows only lets installed packages use Phi Silica. To install Nogrammerly as a
 
 The ✦ menu shows whether the AI is on. Without Developer Mode, or on a PC that isn't a Copilot+ PC, Nogrammerly still works. It uses the Windows spell checker and its built-in style rules.
 
+## LM Studio on your network (optional)
+
+If you run [LM Studio](https://lmstudio.ai) with its local server enabled — on this PC or another machine on your network — Nogrammerly can use it instead of Phi Silica. Choose **✦ › AI provider › LM Studio**, then **LM Studio settings…** to set:
+
+- **Base URL**: an absolute `http(s)` URL ending in `/v1`, e.g. `http://192.168.1.20:1234/v1`. No credentials, query strings or fragments.
+- **Model ID**: press **Test / discover models** to list the server's `/v1/models` and pick one, or type the ID.
+
+Settings are saved per Windows user in `%LOCALAPPDATA%\Nogrammerly\settings.json`, and your choice sticks across restarts even when the server is offline. Nothing is sent until LM Studio is selected, and a failed LM Studio call never falls back to another AI — you get the deterministic rules instead. The ✦ menu shows the selected provider and the last error (for example `LM Studio: Connection failed`).
+
+**Privacy:** with LM Studio, the text being checked or rewritten is sent over your network to the address you configured. Over plain HTTP it is **unencrypted on your LAN** — use HTTPS if your server supports it. You configure the server's binding and firewall yourself; Nogrammerly never starts or reconfigures it. Phi Silica and rules only stay entirely on this PC.
+
+### Manual smoke checklist (Windows, with a real LM Studio endpoint)
+
+1. Select each provider in turn (Phi Silica / LM Studio / Rules only); confirm the ✦ menu header and the check mark follow the selection and survive a restart.
+2. In LM Studio settings, test/discover models, pick one, save; confirm an invalid URL or empty model ID is refused with a clear message and nothing is sent.
+3. Type a sentence with a mistake in Notepad: confirm underlines appear, then proofread findings include the LM Studio ones.
+4. Use **Rewrite entire text** in a tone; confirm the replacement comes from the selected model.
+5. **Pause**, edit text, change provider mid-check: confirm no stale underlines or replacements appear afterwards.
+6. Stop the LM Studio server: the menu shows the error state, rules-only suggestions still work, and no Phi Silica call happens. Restart the server and confirm checks resume.
+
 ## How to use it
 
 - Type in almost any app. Issues are underlined in four colours:
@@ -50,7 +70,7 @@ The ✦ menu shows whether the AI is on. Without Developer Mode, or on a PC that
   - rewrite the whole text.
 - **Click the ✦ icon** to:
   - pause Nogrammerly;
-  - check whether the AI is on;
+  - check whether the AI is on and choose the AI provider (Phi Silica, LM Studio, or rules only);
   - quit.
 
 Password fields are never read. Fixes are only typed while the app you're writing in is in front, and line breaks are typed as Shift+Enter, so a rewrite can't send a chat message early.
@@ -60,6 +80,7 @@ Password fields are never read. Fixes are only typed while the app you're writin
 - **No underlines in one app.** Some apps, notably some Electron apps, don't tell Windows where their text is on screen. The round button and the ✦ menu still list and apply every suggestion.
 - **"Install with Install.cmd for on-device AI" in the ✦ menu.** Turn on Developer Mode, then run **Install.cmd** again.
 - **"On-device AI needs a Copilot+ PC".** This PC has no supported NPU. The spelling and style checks still work.
+- **"LM Studio: Connection failed" (or similar) in the ✦ menu.** The configured server isn't reachable: check LM Studio's server is running, its network binding and firewall allow the connection, and the base URL ends in `/v1`. Spelling and style checks keep working while it's unreachable.
 
 ## Uninstall
 

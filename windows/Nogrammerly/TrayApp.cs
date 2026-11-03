@@ -12,7 +12,9 @@ namespace Nogrammerly;
 internal sealed class TrayApp : ApplicationContext
 {
     private readonly SynchronizationContext ui = SynchronizationContext.Current!;
-    private readonly SystemWritingAssistant assistant = new();
+    private AppSettings settings;
+    private readonly LmStudioWriter lmStudio = new();
+    private readonly SystemWritingAssistant assistant;
     private readonly NotifyIcon tray = new();
     private readonly UnderlineOverlay overlay = new();
     private readonly FieldButton fieldButton;
@@ -24,6 +26,8 @@ internal sealed class TrayApp : ApplicationContext
 
     public TrayApp(bool firstRun)
     {
+        settings = AppSettings.Load(AppSettings.ProductionPath, out var settingsError);
+        assistant = new SystemWritingAssistant(settings, lmStudio);
         fieldButton = new FieldButton(() => ShowMenu(BuildFieldMenu()));
         tray.Icon = Icon.ExtractAssociatedIcon(Environment.ProcessPath!) ?? SystemIcons.Application;
         tray.Text = "Nogrammerly";
@@ -40,6 +44,7 @@ internal sealed class TrayApp : ApplicationContext
         hook = SetWindowsHookEx(WH_MOUSE_LL, hookProc, GetModuleHandle(null), 0);
 
         _ = AIWriter.PrewarmAsync();
+        if (settingsError is not null) tray.ShowBalloonTip(6000, "Nogrammerly", settingsError, ToolTipIcon.None);
         if (firstRun) Welcome();
     }
 
@@ -122,25 +127,41 @@ internal sealed class TrayApp : ApplicationContext
 
     private void AddAIStatus(ToolStripItemCollection items)
     {
-        switch (AIWriter.Check())
-        {
-            case AIWriter.Availability.Ready:
-                Header(items, "On-device AI is on");
-                break;
-            case AIWriter.Availability.NeedsDownload:
-                items.Add("Set up on-device AI…", null, async (_, _) => await OfferDownload());
-                break;
-            case AIWriter.Availability.DisabledByUser:
-                Header(items, "On-device AI is turned off in Windows Settings");
-                break;
-            case AIWriter.Availability.Unsupported:
-                Header(items, "On-device AI needs a Copilot+ PC");
-                break;
-            case AIWriter.Availability.NeedsInstall:
-                Header(items, "Install with Install.cmd for on-device AI");
-                break;
-        }
+        var phi = (PhiState)AIWriter.Check();
+        Header(items, ProviderStatus.StatusText(settings.Provider, phi, lmStudio.LastError));
+        var pick = new ToolStripMenuItem($"AI provider: {ProviderStatus.Name(settings.Provider)}");
+        foreach (var provider in Enum.GetValues<AiProvider>())
+            pick.DropDownItems.Add(new ToolStripMenuItem(ProviderStatus.Name(provider), null, (_, _) => SelectProvider(provider)) { Checked = provider == settings.Provider });
+        pick.DropDownItems.Add(new ToolStripSeparator());
+        pick.DropDownItems.Add("LM Studio settings…", null, (_, _) => EditLmStudioSettings());
+        items.Add(pick);
+        if (ProviderStatus.ShowPhiSetup(settings.Provider, phi))
+            items.Add("Set up on-device AI…", null, async (_, _) => await OfferDownload());
     }
+
+    /// <summary>Sticky provider choice: persisted, then handed to the worker, which cancels stale AI work.</summary>
+    private void SelectProvider(AiProvider provider)
+    {
+        var next = settings with { Provider = provider };
+        if (!next.TryValidate(out var error))
+        {
+            Warn($"LM Studio needs a URL and a model ID before it can be selected.\n\n{error}\n\nUse “LM Studio settings…” to configure them.");
+            return;
+        }
+        SaveSettings(next);
+    }
+
+    private void SaveSettings(AppSettings next)
+    {
+        try { next.Save(AppSettings.ProductionPath); }
+        catch (Exception e) { Warn($"Nogrammerly couldn't save its settings: {e.Message}"); return; }
+        settings = next;
+        assistant.UpdateSettings(next);
+    }
+
+    private void EditLmStudioSettings() => new LmStudioSettingsDialog(settings, lmStudio, SaveSettings).ShowDialog();
+
+    private void Warn(string message) => MessageBox.Show(message, "Nogrammerly", MessageBoxButtons.OK, MessageBoxIcon.Warning);
 
     private async Task OfferDownload()
     {
@@ -198,19 +219,24 @@ internal sealed class TrayApp : ApplicationContext
 
     private void Welcome()
     {
-        var ai = AIWriter.Check() switch
+        var ai = settings.Provider switch
         {
-            AIWriter.Availability.Ready => "On-device AI is on: grammar, clarity and tone checks and rewrites use the language model built into Windows.",
-            AIWriter.Availability.NeedsDownload => "On-device AI is available on this PC. Choose “Set up on-device AI” from the tray icon menu to turn it on.",
-            AIWriter.Availability.NeedsInstall => "To use on-device AI on a Copilot+ PC, install Nogrammerly with Install.cmd.",
-            _ => "On-device AI isn't available on this PC, so Nogrammerly uses the Windows spell checker and its built-in style rules.",
+            AiProvider.LmStudio => $"AI provider: LM Studio ({settings.BaseUrl}, model {settings.ModelId}).",
+            AiProvider.RulesOnly => "AI provider: rules only — spelling and built-in style rules, no language model.",
+            _ => AIWriter.Check() switch
+            {
+                AIWriter.Availability.Ready => "AI provider: Phi Silica, the language model built into Windows.",
+                AIWriter.Availability.NeedsDownload => "Phi Silica is available on this PC. Choose “Set up on-device AI” from the tray icon menu to turn it on.",
+                AIWriter.Availability.NeedsInstall => "To use Phi Silica on a Copilot+ PC, install Nogrammerly with Install.cmd.",
+                _ => "Phi Silica isn't available on this PC, so Nogrammerly uses the Windows spell checker and its built-in style rules.",
+            },
         };
         MessageBox.Show(
             "Nogrammerly is running in the notification area (bottom-right, near the clock; look under ^ if you don't see ✦).\n\n" +
             "• Type in almost any app. Issues are underlined: red = correctness, blue = clarity, purple = delivery, orange = style.\n" +
             "• Right-click an underline to replace it, copy the suggestion, rewrite the sentence, or ignore it.\n" +
             "• Click the round button in the corner of the text box to see every suggestion, or rewrite your selection or the whole text.\n\n" +
-            ai + "\n\nNothing you type leaves this PC.",
+            ai + "\n\n" + ProviderStatus.PrivacyCopy(settings.Provider),
             "Welcome to Nogrammerly", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
@@ -220,6 +246,7 @@ internal sealed class TrayApp : ApplicationContext
         tray.Visible = false;
         tray.Dispose();
         assistant.Dispose();
+        lmStudio.Dispose();
         base.ExitThreadCore();
     }
 }

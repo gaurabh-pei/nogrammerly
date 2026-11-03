@@ -1,15 +1,15 @@
 <p align="center"><img src="Assets/Nogrammerly-logo.png" width="520" alt="Nogrammerly"></p>
 
-<p align="center"><b>The free, open-source, 100% on-device Grammarly alternative for Mac and Windows.</b><br>
+<p align="center"><b>The free, open-source, on-device Grammarly alternative for Mac and Windows.</b><br>
 Spelling, grammar, clarity and tone checks plus one-click rewrites, in Slack, Teams, Outlook, Mail, Zoom, Notepad and almost every other app.<br>
-Powered by the AI built into your computer: Apple Intelligence on Mac, Phi Silica on Windows Copilot+ PCs. Your writing never leaves your device.</p>
+Powered by the AI built into your computer: Apple Intelligence on Mac, Phi Silica on Windows Copilot+ PCs. Your writing never leaves your device — or point Windows Nogrammerly at your own LM Studio server on your LAN.</p>
 
 <p align="center">
   <a href="https://github.com/gaurabh-pei/nogrammerly/releases/latest"><img src="https://img.shields.io/github/v/release/gaurabh-pei/nogrammerly?label=release&color=4f46e5" alt="Latest release"></a>
   <a href="https://github.com/gaurabh-pei/nogrammerly/stargazers"><img src="https://img.shields.io/github/stars/gaurabh-pei/nogrammerly?style=flat&color=f59e0b&logo=github" alt="GitHub stars"></a>
   <img src="https://img.shields.io/badge/macOS-14%2B-black?logo=apple" alt="macOS 14+">
   <img src="https://img.shields.io/badge/Windows-10%20%7C%2011%20(beta)-0078D4?logo=windows" alt="Windows 10 and 11 (beta)">
-  <img src="https://img.shields.io/badge/privacy-100%25%20on--device-16a34a?logo=letsencrypt&logoColor=white" alt="100% on-device">
+  <img src="https://img.shields.io/badge/privacy--on--device-16a34a?logo=letsencrypt&logoColor=white" alt="on-device by default">
   <a href="https://github.com/gaurabh-pei/nogrammerly/actions/workflows/swift.yml"><img src="https://github.com/gaurabh-pei/nogrammerly/actions/workflows/swift.yml/badge.svg" alt="Mac build"></a>
   <a href="https://github.com/gaurabh-pei/nogrammerly/actions/workflows/windows.yml"><img src="https://github.com/gaurabh-pei/nogrammerly/actions/workflows/windows.yml/badge.svg" alt="Windows build"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT license"></a>
@@ -29,7 +29,7 @@ Powered by the AI built into your computer: Apple Intelligence on Mac, Phi Silic
 
 ## 🔒 Why Nogrammerly?
 
-Cloud writing assistants read everything you type, including private Slack DMs, work email and medical notes, and send it to their servers. Nogrammerly does the same job **entirely on your computer**, using the language model built into it: Apple Intelligence on a Mac, Phi Silica on a Windows Copilot+ PC.
+Cloud writing assistants read everything you type, including private Slack DMs, work email and medical notes, and send it to their servers. Nogrammerly does the same job **on your computer**, using the language model built into it: Apple Intelligence on a Mac, Phi Silica on a Windows Copilot+ PC. The only way text ever leaves — the optional Windows LM Studio provider — sends it to a server on your own network that you configured, never to a cloud.
 
 <p align="center"><img src="Assets/readme/comparison.svg" width="860" alt="Comparison. Nogrammerly: text stays on your device, free, no account, works offline, open source (MIT), Mac and Windows. Cloud writing assistants: text sent to their servers, free tier then a subscription, account required, no offline mode, closed source, platforms vary."></p>
 
@@ -40,7 +40,7 @@ Cloud writing assistants read everything you type, including private Slack DMs, 
 
 | | Nogrammerly | Cloud writing assistants |
 |---|---|---|
-| Where your text goes | ✅ **Stays on your device** | ❌ Sent to their servers |
+| Where your text goes | ✅ **Stays on your device** (or your own LAN with the optional Windows LM Studio provider) | ❌ Sent to their servers |
 | Price | ✅ **Free** | ❌ Free tier, then a subscription |
 | Account needed | ✅ **No** | ❌ Yes |
 | Works offline | ✅ **Yes** | ❌ No |
@@ -90,7 +90,7 @@ On the Mac, a writing window with a writing score, a tone picker and a ✦ Rewri
 <td valign="top">
 
 ### 🔒 Private by design
-The system spell checker, built-in style rules and the on-device model do all the work. Without AI hardware you still get spelling, grammar and style checks.
+The system spell checker, built-in style rules and the on-device model do all the work. Without AI hardware you still get spelling, grammar and style checks. The one network option — Windows LM Studio — talks only to a server on your own network and says so plainly.
 
 </td>
 </tr>

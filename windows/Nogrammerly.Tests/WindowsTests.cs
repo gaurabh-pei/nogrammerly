@@ -494,6 +494,57 @@ public class LmStudioWriterTests
 }
 
 /// <summary>
+/// The tray's UI-independent status and privacy wording: which line the menu shows for the
+/// selected provider, and what the app may claim about where text goes.
+/// </summary>
+public class ProviderStatusTests
+{
+    [Fact]
+    public void EveryProviderHasADisplayName()
+    {
+        Assert.Equal("Phi Silica", ProviderStatus.Name(AiProvider.PhiSilica));
+        Assert.Equal("LM Studio", ProviderStatus.Name(AiProvider.LmStudio));
+        Assert.Equal("Rules only", ProviderStatus.Name(AiProvider.RulesOnly));
+    }
+
+    [Fact]
+    public void PhiSilicaStatusReflectsAvailability()
+    {
+        Assert.Equal("On-device AI is on", ProviderStatus.StatusText(AiProvider.PhiSilica, PhiState.Ready, null));
+        Assert.Equal("On-device AI needs a Copilot+ PC", ProviderStatus.StatusText(AiProvider.PhiSilica, PhiState.Unsupported, null));
+        Assert.Equal("Set up on-device AI…", ProviderStatus.StatusText(AiProvider.PhiSilica, PhiState.NeedsDownload, null));
+        Assert.True(ProviderStatus.ShowPhiSetup(AiProvider.PhiSilica, PhiState.NeedsDownload));
+        Assert.False(ProviderStatus.ShowPhiSetup(AiProvider.LmStudio, PhiState.NeedsDownload)); // setup prompt only when Phi is selected
+    }
+
+    [Fact]
+    public void LmStudioStatusShowsLastErrorAndNeverLeaksUrlOrText()
+    {
+        Assert.Equal("LM Studio: Connection failed", ProviderStatus.StatusText(AiProvider.LmStudio, PhiState.Ready, "connection failed"));
+        Assert.Equal("LM Studio: HTTP 500", ProviderStatus.StatusText(AiProvider.LmStudio, PhiState.Ready, "HTTP 500"));
+        Assert.Equal("LM Studio selected, no errors reported yet", ProviderStatus.StatusText(AiProvider.LmStudio, PhiState.Unsupported, null));
+        var status = ProviderStatus.StatusText(AiProvider.LmStudio, PhiState.Ready, "connection failed");
+        Assert.DoesNotContain("127.0.0.1", status);
+        Assert.DoesNotContain("recieve", status);
+    }
+
+    [Fact]
+    public void RulesOnlyNeverClaimsAI()
+        => Assert.Equal("Rules only: no AI provider is used", ProviderStatus.StatusText(AiProvider.RulesOnly, PhiState.Ready, "connection failed"));
+
+    [Fact]
+    public void PrivacyCopyOnlyClaimsOnPcForLocalProviders()
+    {
+        Assert.Contains("leaves this PC", ProviderStatus.PrivacyCopy(AiProvider.PhiSilica));
+        Assert.Contains("leaves this PC", ProviderStatus.PrivacyCopy(AiProvider.RulesOnly));
+        var lan = ProviderStatus.PrivacyCopy(AiProvider.LmStudio);
+        Assert.DoesNotContain("leaves this PC", lan);
+        Assert.Contains("unencrypted", lan); // LAN HTTP warning is explicit
+        Assert.DoesNotContain("inside this PC", lan); // never call LM Studio local
+    }
+}
+
+/// <summary>
 /// Provider dispatch and staleness gating, exercised through the narrow seam in
 /// <see cref="SystemWritingAssistant"/>. Synthetic text only; the fake server records every connection.
 /// </summary>
