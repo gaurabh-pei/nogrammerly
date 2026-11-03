@@ -1,11 +1,15 @@
+using Nogrammerly.Core;
+
+#if WINDOWS
 using System.Collections.Concurrent;
 using System.Drawing;
 using System.Globalization;
 using FlaUI.UIA3;
-using Nogrammerly.Core;
+#endif
 
 namespace Nogrammerly;
 
+#if WINDOWS
 /// <summary>An issue drawn on screen: one rectangle per line it covers, in physical screen pixels.</summary>
 internal sealed record Mark(WritingSuggestion Suggestion, Rectangle[] Rects);
 
@@ -32,6 +36,8 @@ internal sealed class SystemWritingAssistant : IDisposable
     private readonly SpellChecker spellChecker = new(CultureInfo.CurrentUICulture.Name);
     private readonly HashSet<string> ignored = [];
     private readonly int ownProcessId = Environment.ProcessId;
+    private readonly LmStudioWriter lmStudio;
+    private readonly bool ownsLmStudio;
     private volatile bool running = true;
 
     // Worker-thread state.
@@ -40,19 +46,32 @@ internal sealed class SystemWritingAssistant : IDisposable
     private string text = "";
     private IReadOnlyList<WritingSuggestion> suggestions = [];
     private CancellationTokenSource? proofread;
+    private CancellationTokenSource? rewrite;
+    private AppSettings settings = AppSettings.Default;
+    private long generation;   // bumped on every settings update; invalidates in-flight AI work
+    private int fieldSerial;   // bumped whenever the watched field changes, even for identical text
 
     /// <summary>Raised on the UI thread whenever the focused field's state changes.</summary>
     public event Action<FieldState>? StateChanged;
     /// <summary>Raised on the UI thread with a message for the user.</summary>
     public event Action<string>? Notice;
 
-    public SystemWritingAssistant()
+    public SystemWritingAssistant(AppSettings settings, LmStudioWriter lmStudio)
     {
+        this.settings = settings;
+        this.lmStudio = lmStudio;
         ui = SynchronizationContext.Current ?? throw new InvalidOperationException("Create on the UI thread.");
         // UI Automation clients should run on an MTA thread of their own.
         worker = new Thread(Run) { IsBackground = true, Name = "UI Automation" };
         worker.SetApartmentState(ApartmentState.MTA);
         worker.Start();
+    }
+
+    // ponytail: keeps the tray compiling unchanged until task 4 wires the tray to pass both explicitly.
+    public SystemWritingAssistant()
+        : this(AppSettings.Load(AppSettings.ProductionPath, out _), new LmStudioWriter())
+    {
+        ownsLmStudio = true;
     }
 
     public bool IsRunning => running;
@@ -62,6 +81,19 @@ internal sealed class SystemWritingAssistant : IDisposable
         running = value;
         if (!value) work.Add(Reset);
     }
+
+    /// <summary>
+    /// Applies a new provider selection on the worker queue: cancels in-flight AI work, bumps the
+    /// generation so stale results are discarded, and forces a fresh analysis of the current field.
+    /// </summary>
+    public void UpdateSettings(AppSettings settings) => work.Add(() =>
+    {
+        this.settings = settings;
+        generation++;
+        proofread?.Cancel();
+        rewrite?.Cancel();
+        text = ""; // the next poll re-analyses the field the user is in, with the new provider
+    });
 
     // Commands from the UI. Each re-checks that the suggestion is still live, so a stale menu can't act on old text.
 
@@ -129,29 +161,37 @@ internal sealed class SystemWritingAssistant : IDisposable
         {
             field = focused;
             text = value;
+            fieldSerial++; // pending work for the previous field is stale even if the text is identical
             suggestions = WritingEngine.Analyze(value, spellChecker.Check).Suggestions.Where(s => !ignored.Contains(s.IgnoreKey)).ToList();
             ScheduleProofread(value);
         }
         Publish(suggestions);
     }
 
-    /// <summary>Debounced on-device model pass; merges its findings behind the instant spelling and style results.</summary>
+    /// <summary>Debounced AI pass through the explicitly selected provider; merges its findings behind the instant spelling and style results.</summary>
     private void ScheduleProofread(string value)
     {
         proofread?.Cancel();
-        if (!AIWriter.IsReady) return;
+        if (settings.Provider == AiProvider.RulesOnly) return; // no AI call at all
+        if (settings.Provider == AiProvider.PhiSilica && !AIWriter.IsReady) return;
         var cancellation = proofread = new CancellationTokenSource();
+        var selected = settings;
+        var ticket = new WorkTicket(generation, fieldSerial, value);
         _ = Task.Run(async () =>
         {
-            await Task.Delay(900, cancellation.Token);
-            var found = await AIWriter.ProofreadAsync(value, cancellation.Token);
-            if (cancellation.IsCancellationRequested || found.Count == 0) return;
-            work.Add(() =>
+            try
             {
-                if (text != value) return;
-                suggestions = WritingEngine.Merge(suggestions, found.Where(s => !ignored.Contains(s.IgnoreKey)));
-                Publish(suggestions);
-            });
+                await Task.Delay(900, cancellation.Token);
+                var found = await ProviderRouting.ProofreadAsync(selected, value, lmStudio, AIWriter.ProofreadAsync, cancellation.Token);
+                if (cancellation.IsCancellationRequested || found.Count == 0) return;
+                work.Add(() =>
+                {
+                    if (!ticket.Current(generation, fieldSerial, text)) return;
+                    suggestions = WritingEngine.Merge(suggestions, found.Where(s => !ignored.Contains(s.IgnoreKey)));
+                    Publish(suggestions);
+                });
+            }
+            catch (Exception) { } // cancelled or provider failed: the deterministic rules already on screen stand
         }, cancellation.Token);
     }
 
@@ -177,8 +217,10 @@ internal sealed class SystemWritingAssistant : IDisposable
     private void Reset()
     {
         proofread?.Cancel();
+        rewrite?.Cancel();
         if (field is null && suggestions.Count == 0) return;
         field = null; text = ""; suggestions = [];
+        fieldSerial++; // pending work for the field we just dropped must not come back
         Post(FieldState.None);
     }
 
@@ -187,14 +229,26 @@ internal sealed class SystemWritingAssistant : IDisposable
     private void Rewrite(TextSpan span, WritingTone tone)
     {
         if (field is null || span.Length == 0 || span.End > text.Length) return;
-        var target = field;
         var original = text.Substring(span.Start, span.Length);
-        Say(AIWriter.IsReady ? "Rewriting…" : "Rewriting with built-in rules (on-device AI is not set up)…");
+        var cancellation = rewrite = new CancellationTokenSource();
+        var selected = settings;
+        var ticket = new WorkTicket(generation, fieldSerial, text);
+        Say(selected.Provider == AiProvider.PhiSilica && !AIWriter.IsReady || selected.Provider == AiProvider.RulesOnly
+            ? "Rewriting with built-in rules (the selected AI is not available)…" : "Rewriting…");
         _ = Task.Run(async () =>
         {
-            var rewritten = await AIWriter.RewriteAsync(original, tone) ?? WritingEngine.Rewrite(original, tone);
-            work.Add(() => { if (field == target) ReplaceText(span, original, rewritten); });
-        });
+            try
+            {
+                var rewritten = await ProviderRouting.RewriteAsync(selected, original, tone, lmStudio, AIWriter.RewriteAsync, cancellation.Token);
+                work.Add(() =>
+                {
+                    // A settings change, pause or field switch since the request started discards it.
+                    if (!ticket.Current(generation, fieldSerial, text)) return;
+                    ReplaceText(span, original, rewritten);
+                });
+            }
+            catch (Exception) { } // cancelled or failed: nothing is replaced, no unobserved exception
+        }, cancellation.Token);
     }
 
     /// <summary>Replaces <paramref name="span"/> only if it still contains <paramref name="expected"/>, so a stale suggestion can never overwrite newer typing.</summary>
@@ -219,7 +273,62 @@ internal sealed class SystemWritingAssistant : IDisposable
 
     public void Dispose()
     {
+        proofread?.Cancel();
+        rewrite?.Cancel();
         work.CompleteAdding();
         worker.Join(TimeSpan.FromSeconds(2));
+        if (ownsLmStudio) lmStudio.Dispose();
+    }
+}
+#endif
+
+// Narrow test seam (kept outside #if WINDOWS so routing and staleness rules are testable off Windows):
+// pure provider dispatch and the staleness gate the worker checks before publishing or replacing.
+
+/// <summary>Snapshot of the work a pending AI call belongs to; a result may only land on a still-current field.</summary>
+internal readonly record struct WorkTicket(long Generation, int FieldSerial, string Text)
+{
+    public bool Current(long generation, int fieldSerial, string text)
+        => Generation == generation && FieldSerial == fieldSerial && Text == text;
+}
+
+internal static class ProviderRouting
+{
+    /// <summary>Runs the selected provider only. A failure yields no findings — never another AI.</summary>
+    public static async Task<IReadOnlyList<WritingSuggestion>> ProofreadAsync(
+        AppSettings settings, string text, LmStudioWriter lmStudio,
+        Func<string, CancellationToken, Task<IReadOnlyList<WritingSuggestion>>> phi,
+        CancellationToken token)
+    {
+        try
+        {
+            return settings.Provider switch
+            {
+                AiProvider.PhiSilica => await phi(text, token),
+                AiProvider.LmStudio => await lmStudio.ProofreadAsync(text, settings, token),
+                _ => [], // RulesOnly: no AI call at all
+            };
+        }
+        catch (Exception) { return []; } // cancellation or provider failure: deterministic rules already on screen stand
+    }
+
+    /// <summary>Rewrites with the selected provider only; on failure or RulesOnly falls back to the deterministic rules rewrite.</summary>
+    public static async Task<string> RewriteAsync(
+        AppSettings settings, string text, WritingTone tone, LmStudioWriter lmStudio,
+        Func<string, WritingTone, Task<string?>> phi,
+        CancellationToken token)
+    {
+        string? rewritten = null;
+        try
+        {
+            rewritten = settings.Provider switch
+            {
+                AiProvider.PhiSilica => await phi(text, tone),
+                AiProvider.LmStudio => await lmStudio.RewriteAsync(text, tone, settings, token),
+                _ => null, // RulesOnly: no AI call at all
+            };
+        }
+        catch (Exception) { }
+        return rewritten ?? WritingEngine.Rewrite(text, tone);
     }
 }

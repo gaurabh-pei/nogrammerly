@@ -493,6 +493,149 @@ public class LmStudioWriterTests
 #pragma warning restore xUnit1051
 }
 
+/// <summary>
+/// Provider dispatch and staleness gating, exercised through the narrow seam in
+/// <see cref="SystemWritingAssistant"/>. Synthetic text only; the fake server records every connection.
+/// </summary>
+public class ProviderRoutingTests
+{
+    // These tests exercise explicit cancellation semantics (default and pre-cancelled tokens), not test-run cancellation.
+#pragma warning disable xUnit1051
+    private const string Text = "We recieve mail.";
+    private static readonly WritingSuggestion PhiIssue = new(SuggestionKind.Correctness, "Spelling", "Misspelling.", "recieve", "receive", new TextSpan(3, 7));
+
+    private static Task<IReadOnlyList<WritingSuggestion>> PhiMustNotBeCalled(string _, CancellationToken __)
+        => throw new InvalidOperationException("Phi Silica must not run for another provider");
+
+    private static Task<string?> PhiRewriteMustNotBeCalled(string _, WritingTone __)
+        => throw new InvalidOperationException("Phi Silica must not run for another provider");
+
+    [Fact]
+    public async Task RulesOnlyProofreadMakesNoCallAnywhere()
+    {
+        using var server = new FakeHttpServer();
+        server.Start();
+        using var lm = new LmStudioWriter();
+
+        var result = await ProviderRouting.ProofreadAsync(
+            new AppSettings(AiProvider.RulesOnly, server.BaseUrl, ""), Text, lm, PhiMustNotBeCalled, default);
+
+        Assert.Empty(result);
+        Assert.Equal(0, Volatile.Read(ref server.Connections));
+    }
+
+    [Fact]
+    public async Task RulesOnlyRewriteUsesDeterministicRules()
+    {
+        using var server = new FakeHttpServer();
+        server.Start();
+        using var lm = new LmStudioWriter();
+
+        var result = await ProviderRouting.RewriteAsync(
+            new AppSettings(AiProvider.RulesOnly, server.BaseUrl, ""), Text, WritingTone.Concise, lm, PhiRewriteMustNotBeCalled, default);
+
+        Assert.Equal(WritingEngine.Rewrite(Text, WritingTone.Concise), result);
+        Assert.Equal(0, Volatile.Read(ref server.Connections));
+    }
+
+    [Fact]
+    public async Task LmProofreadFailureNeverFallsBackToPhi()
+    {
+        using var server = new FakeHttpServer();
+        server.Responder = _ => (500, "nope", "text/plain", null);
+        server.Start();
+        using var lm = new LmStudioWriter();
+        var phiCalled = false;
+
+        var result = await ProviderRouting.ProofreadAsync(
+            new AppSettings(AiProvider.LmStudio, server.BaseUrl, "test-model"), Text, lm,
+            (_, _) => { phiCalled = true; return Task.FromResult<IReadOnlyList<WritingSuggestion>>([PhiIssue]); }, default);
+
+        Assert.Empty(result); // deterministic rules already on screen survive; no other AI runs
+        Assert.False(phiCalled);
+        Assert.Equal(1, Volatile.Read(ref server.Connections));
+    }
+
+    [Fact]
+    public async Task LmRewriteFailureFallsBackToRulesNotPhi()
+    {
+        using var server = new FakeHttpServer();
+        server.Responder = _ => (500, "nope", "text/plain", null);
+        server.Start();
+        using var lm = new LmStudioWriter();
+        var phiCalled = false;
+
+        var result = await ProviderRouting.RewriteAsync(
+            new AppSettings(AiProvider.LmStudio, server.BaseUrl, "test-model"), Text, WritingTone.Concise, lm,
+            (_, _) => { phiCalled = true; return Task.FromResult<string?>("never"); }, default);
+
+        Assert.Equal(WritingEngine.Rewrite(Text, WritingTone.Concise), result);
+        Assert.False(phiCalled);
+    }
+
+    [Fact]
+    public async Task PhiProofreadUsesPhiAndNotLm()
+    {
+        using var server = new FakeHttpServer();
+        server.Start();
+        using var lm = new LmStudioWriter();
+
+        var result = await ProviderRouting.ProofreadAsync(
+            new AppSettings(AiProvider.PhiSilica, server.BaseUrl, ""), Text, lm,
+            (_, _) => Task.FromResult<IReadOnlyList<WritingSuggestion>>([PhiIssue]), default);
+
+        Assert.Same(PhiIssue, Assert.Single(result));
+        Assert.Equal(0, Volatile.Read(ref server.Connections));
+    }
+
+    [Fact]
+    public async Task PhiRewriteWithoutResultFallsBackToRules()
+    {
+        using var lm = new LmStudioWriter();
+
+        var result = await ProviderRouting.RewriteAsync(
+            new AppSettings(AiProvider.PhiSilica, "http://127.0.0.1:1/v1", ""), Text, WritingTone.Concise, lm,
+            (_, _) => Task.FromResult<string?>(null), default);
+
+        Assert.Equal(WritingEngine.Rewrite(Text, WritingTone.Concise), result);
+    }
+
+    [Fact]
+    public async Task CancelledProofreadYieldsNoResult()
+    {
+        using var server = new FakeHttpServer();
+        server.Responder = _ => (200, "{}", "application/json", null);
+        server.Start();
+        using var lm = new LmStudioWriter();
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        var result = await ProviderRouting.ProofreadAsync(
+            new AppSettings(AiProvider.LmStudio, server.BaseUrl, "test-model"), Text, lm, PhiMustNotBeCalled, cancellation.Token);
+
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public void IdenticalTextInADifferentFieldIsStale()
+    {
+        var ticket = new WorkTicket(0, 1, Text);
+
+        Assert.True(ticket.Current(0, 1, Text));
+        Assert.False(ticket.Current(0, 2, Text)); // same text, new field: the old result must not publish
+    }
+
+    [Fact]
+    public void SettingsChangeAndPauseInvalidatePendingWork()
+    {
+        var ticket = new WorkTicket(3, 5, "hello");
+
+        Assert.False(ticket.Current(4, 5, "hello")); // settings update bumped the generation
+        Assert.False(ticket.Current(3, 5, ""));      // pause/reset cleared the field text
+    }
+#pragma warning restore xUnit1051
+}
+
 #if WINDOWS
 /// <summary>Reads and positions text in a real Notepad window through UI Automation.</summary>
 public class TextFieldTests : IDisposable
