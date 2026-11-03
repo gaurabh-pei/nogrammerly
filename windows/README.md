@@ -33,23 +33,24 @@ The ✦ menu shows whether the AI is on. Without Developer Mode, or on a PC that
 
 ## LM Studio on your network (optional)
 
-If you run [LM Studio](https://lmstudio.ai) with its local server enabled — on this PC or another machine on your network — Nogrammerly can use it instead of Phi Silica. Choose **✦ › AI provider › LM Studio**, then **LM Studio settings…** to set:
+If you run [LM Studio](https://lmstudio.ai) with its local server enabled — on this PC or another machine on your network — Nogrammerly can use it instead of Phi Silica. Open **✦ › AI provider › LM Studio settings…** to configure it first, then choose **LM Studio** in the provider menu:
 
 - **Base URL**: an absolute `http(s)` URL ending in `/v1`, e.g. `http://192.168.1.20:1234/v1`. No credentials, query strings or fragments.
 - **Model ID**: press **Test / discover models** to list the server's `/v1/models` and pick one, or type the ID.
 
-Settings are saved per Windows user in `%LOCALAPPDATA%\Nogrammerly\settings.json`, and your choice sticks across restarts even when the server is offline. Nothing is sent until LM Studio is selected, and a failed LM Studio call never falls back to another AI — you get the deterministic rules instead. The ✦ menu shows the selected provider and the last error (for example `LM Studio: Connection failed`).
+Settings are saved per Windows user in `%LOCALAPPDATA%\Nogrammerly\settings.json`, and your provider choice sticks across restarts even when the server is offline. Saving LM Studio settings does not change the provider. No edited text is sent until LM Studio is selected; the optional **Test / discover models** button sends only a `/v1/models` request. A failed LM Studio call never falls back to another AI — you get the deterministic rules instead. The ✦ menu shows the selected provider and the last error (for example `LM Studio: Connection failed`).
 
 **Privacy:** with LM Studio, the text being checked or rewritten is sent over your network to the address you configured. Over plain HTTP it is **unencrypted on your LAN** — use HTTPS if your server supports it. You configure the server's binding and firewall yourself; Nogrammerly never starts or reconfigures it. Phi Silica and rules only stay entirely on this PC.
 
 ### Manual smoke checklist (Windows, with a real LM Studio endpoint)
 
-1. Select each provider in turn (Phi Silica / LM Studio / Rules only); confirm the ✦ menu header and the check mark follow the selection and survive a restart.
-2. In LM Studio settings, test/discover models, pick one, save; confirm an invalid URL or empty model ID is refused with a clear message and nothing is sent.
-3. Type a sentence with a mistake in Notepad: confirm underlines appear, then proofread findings include the LM Studio ones.
-4. Use **Rewrite entire text** in a tone; confirm the replacement comes from the selected model.
-5. **Pause**, edit text, change provider mid-check: confirm no stale underlines or replacements appear afterwards.
-6. Stop the LM Studio server: the menu shows the error state, rules-only suggestions still work, and no Phi Silica call happens. Restart the server and confirm checks resume.
+1. Select Phi Silica and Rules only; confirm the ✦ menu header and check mark follow the selection and survive a restart.
+2. While Phi Silica is selected, configure LM Studio without changing the active provider. Test/discover models, pick one, save, then explicitly select LM Studio. Confirm its selection survives a restart; invalid URL or empty model ID is refused when selecting LM Studio.
+3. Start a model discovery against an unreachable server, then close the dialog while it is pending; the tray app must remain open.
+4. Type a sentence with a mistake in Notepad: confirm underlines appear, then proofread findings include the LM Studio ones.
+5. Use **Rewrite entire text** in a tone; confirm the replacement comes from the selected model.
+6. **Pause**, edit text, change provider mid-check: confirm no stale underlines or replacements appear afterwards.
+7. Stop the LM Studio server: the menu shows the error state, rules-only suggestions still work, and no Phi Silica call happens. Restart the server and confirm checks resume.
 
 ## How to use it
 

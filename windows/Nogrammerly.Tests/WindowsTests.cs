@@ -31,6 +31,23 @@ public class SpellCheckerTests
 }
 #endif
 
+#if WINDOWS
+public class LmStudioSettingsDialogTests
+{
+    [Fact]
+    public void SavingConnectionDoesNotSelectProvider()
+    {
+        using var writer = new LmStudioWriter();
+        var current = new AppSettings(AiProvider.PhiSilica, "http://127.0.0.1:1234/v1", "model-a");
+        using var dialog = new LmStudioSettingsDialog(current, writer, _ => true);
+        var draft = (AppSettings)typeof(LmStudioSettingsDialog)
+            .GetProperty("Draft", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .GetValue(dialog)!;
+        Assert.Equal(AiProvider.PhiSilica, draft.Provider);
+    }
+}
+#endif
+
 public class AppSettingsTests
 {
     private static string TempPath() => Path.Combine(Path.GetTempPath(), $"nogrammerly-settings-{Guid.NewGuid():N}.json");

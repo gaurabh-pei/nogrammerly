@@ -151,15 +151,20 @@ internal sealed class TrayApp : ApplicationContext
         SaveSettings(next);
     }
 
-    private void SaveSettings(AppSettings next)
+    private bool SaveSettings(AppSettings next)
     {
         try { next.Save(AppSettings.ProductionPath); }
-        catch (Exception e) { Warn($"Nogrammerly couldn't save its settings: {e.Message}"); return; }
+        catch (Exception e) { Warn($"Nogrammerly couldn't save its settings: {e.Message}"); return false; }
         settings = next;
         assistant.UpdateSettings(next);
+        return true;
     }
 
-    private void EditLmStudioSettings() => new LmStudioSettingsDialog(settings, lmStudio, SaveSettings).ShowDialog();
+    private void EditLmStudioSettings()
+    {
+        using var dialog = new LmStudioSettingsDialog(settings, lmStudio, SaveSettings);
+        dialog.ShowDialog();
+    }
 
     private void Warn(string message) => MessageBox.Show(message, "Nogrammerly", MessageBoxButtons.OK, MessageBoxIcon.Warning);
 

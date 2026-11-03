@@ -8,7 +8,9 @@ namespace Nogrammerly;
 internal sealed class LmStudioSettingsDialog : Form
 {
     private readonly LmStudioWriter lmStudio;
-    private readonly Action<AppSettings> save;
+    private readonly Func<AppSettings, bool> save;
+    private readonly AiProvider provider;
+    private CancellationTokenSource? probeCancellation;
     private readonly TextBox url = new() { Bounds = new Rectangle(150, 12, 340, 26) };
     private readonly TextBox model = new() { Bounds = new Rectangle(150, 44, 340, 26) };
     private readonly ComboBox discovered = new() { Bounds = new Rectangle(150, 112, 340, 26), DropDownStyle = ComboBoxStyle.DropDownList };
@@ -17,10 +19,12 @@ internal sealed class LmStudioSettingsDialog : Form
     private readonly Button cancel = new() { Text = "Cancel", Bounds = new Rectangle(404, 246, 86, 30), DialogResult = DialogResult.Cancel };
     private readonly Label status = new() { Bounds = new Rectangle(150, 182, 340, 56), AutoSize = false };
 
-    public LmStudioSettingsDialog(AppSettings current, LmStudioWriter lmStudio, Action<AppSettings> save)
+    public LmStudioSettingsDialog(AppSettings current, LmStudioWriter lmStudio, Func<AppSettings, bool> save)
     {
         this.lmStudio = lmStudio;
         this.save = save;
+        provider = current.Provider;
+        FormClosed += (_, _) => probeCancellation?.Cancel();
         url.Text = current.BaseUrl;
         model.Text = current.ModelId;
 
@@ -55,7 +59,7 @@ internal sealed class LmStudioSettingsDialog : Form
         CancelButton = cancel;
     }
 
-    private AppSettings Draft => new(AiProvider.LmStudio, url.Text.Trim(), model.Text.Trim());
+    private AppSettings Draft => new(provider, url.Text.Trim(), model.Text.Trim());
 
     private async void Test_Click(object? sender, EventArgs e)
     {
@@ -63,7 +67,11 @@ internal sealed class LmStudioSettingsDialog : Form
         if (!draft.TryValidate(out var error)) { status.Text = error; return; }
         test.Enabled = false;
         status.Text = "Contacting server…";
-        var ids = await Task.Run(() => lmStudio.ModelsAsync(draft, CancellationToken.None));
+        probeCancellation = new CancellationTokenSource();
+        var ids = await Task.Run(() => lmStudio.ModelsAsync(draft, probeCancellation.Token));
+        probeCancellation.Dispose();
+        probeCancellation = null;
+        if (IsDisposed || Disposing || !Visible) return;
         test.Enabled = true;
         discovered.Items.Clear();
         if (ids.Count > 0)
@@ -83,7 +91,7 @@ internal sealed class LmStudioSettingsDialog : Form
             DialogResult = DialogResult.None; // keep the dialog open
             return;
         }
-        save(draft); // throws InvalidOperationException only if validation and save disagree
+        if (!save(draft)) { DialogResult = DialogResult.None; return; }
         status.Text = "Saved.";
     }
 }
