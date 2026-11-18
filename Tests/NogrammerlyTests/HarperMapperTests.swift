@@ -89,6 +89,42 @@ import NogrammerlyCore
         #expect(HarperMapper.map(diagnostics: bad, actions: [], in: text).isEmpty)
     }
 
+    static func lsp(_ start: Int, _ end: Int, line: Int = 0) -> [String: Any] {
+        ["start": ["line": line, "character": start], "end": ["line": line, "character": end]]
+    }
+
+    static func fix(_ range: [String: Any], _ text: String) -> [String: Any] {
+        ["kind": "quickfix", "edit": ["changes": ["file:///nogrammerly/focused.txt": [["range": range, "newText": text]]]]]
+    }
+
+    static func ignore(_ message: String, kind: String = "Spelling") -> [String: Any] {
+        ["command": "HarperIgnoreLint", "arguments": ["file:///nogrammerly/focused.txt", ["lint_kind": kind, "message": message]]]
+    }
+
+    /// A pure insertion (empty edit range) must keep the flagged word: "dont" + insert "'" at 3 → "don't", not "'".
+    @Test func insertionEditKeepsTheWord() throws {
+        let text = "I dont know."
+        let diagnostic: [String: Any] = ["code": "Contraction", "message": "Missing apostrophe.", "range": Self.lsp(2, 6)]
+        let actions = [[Self.fix(Self.lsp(5, 5), "'"), Self.ignore("Missing apostrophe.", kind: "Punctuation")]]
+        let s = try #require(HarperMapper.map(diagnostics: [diagnostic], actions: actions, in: text).first)
+        #expect(s.range == NSRange(location: 2, length: 4))
+        #expect(s.original == "dont" && s.replacement == "don't")
+        #expect(s.kind == .correctness)
+    }
+
+    /// Two overlapping lints with the same message: each gets the fix on its own range.
+    @Test func sameMessageOverlapsPickExactRange() throws {
+        let text = "the the the end"
+        let first: [String: Any] = ["code": "RepeatedWords", "message": "Repeated word.", "range": Self.lsp(0, 7)]
+        let second: [String: Any] = ["code": "RepeatedWords", "message": "Repeated word.", "range": Self.lsp(4, 11)]
+        // What a union-range request returns for either diagnostic: both lints' groups, in order.
+        let both = [Self.fix(Self.lsp(0, 7), "the"), Self.ignore("Repeated word.", kind: "Repetition"),
+                    Self.fix(Self.lsp(4, 11), "the"), Self.ignore("Repeated word.", kind: "Repetition")]
+        let mapped = HarperMapper.map(diagnostics: [first, second], actions: [both, both], in: text)
+        #expect(mapped.map(\.range) == [NSRange(location: 0, length: 7), NSRange(location: 4, length: 7)])
+        #expect(mapped.allSatisfy { $0.replacement == "the" && $0.kind == .clarity })
+    }
+
     @Test func lineStartsHandleAllBreaks() {
         #expect(HarperMapper.lineStarts(of: "a\nb\r\nc\rd") == [0, 2, 5, 7])
         #expect(HarperMapper.lineStarts(of: "") == [0])

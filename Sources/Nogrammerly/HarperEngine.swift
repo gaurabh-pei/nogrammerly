@@ -57,8 +57,10 @@ final class HarperEngine: @unchecked Sendable {
 
     // MARK: Configuration
 
-    /// One stable document URI. It only changes (focused-1.txt, focused-2.txt…) after a lint misses its deadline, so a
-    /// late `publishDiagnostics` (which carries no version) can never be taken as the answer for different text.
+    /// One stable document URI. `publishDiagnostics` carries no version, so the next publish for the current URI after a
+    /// change is taken as its answer. Anything that could leave an extra publish in flight (a missed deadline, a
+    /// workspace command) closes the URI and moves to a fresh one (focused-1.txt, focused-2.txt…); publishes for any
+    /// other URI are dropped, so one can never be read as the answer for different text.
     static let documentURI = "file:///nogrammerly/focused.txt"
     /// Plain text, not Markdown: in Markdown mode harper-ls skips `code` spans, but it also title-cases lines that
     /// start with "#", sentence-cases ">" lines and stops checking inside headings, which misfires on chat and mail.
@@ -153,13 +155,12 @@ final class HarperEngine: @unchecked Sendable {
     private var nextID = 0
     private var waiters: [Int: Waiter] = [:]
     private var diagnosticsWaiter: Waiter?
-    /// Publishes still owed for changes whose wait timed out; they are discarded when they arrive.
-    private var stalePublishes = 0
     private var stopping = false
     private var restartsLeft = 1
     private var uriGeneration = 0
     private var currentURI: String { uriGeneration == 0 ? Self.documentURI : "file:///nogrammerly/focused-\(uriGeneration).txt" }
     private var ready = false
+    private var starting = false
 
     // Serializes lint calls and owns the fields below (one document on the server).
     private let lintLock = NSLock()
@@ -183,6 +184,9 @@ final class HarperEngine: @unchecked Sendable {
 
     private func startLocked(deadline: Date) -> Bool {
         if isRunning { return true }
+        state.lock(); starting = true; state.unlock()
+        defer { state.lock(); starting = false; state.unlock() }
+        Self.status = "Checks: Harper is starting; Apple spelling and grammar until it is ready."
         signal(SIGPIPE, SIG_IGN) // a write to a dead sidecar must fail with EPIPE, not kill the app
         let process = Process()
         process.executableURL = executable
@@ -198,7 +202,7 @@ final class HarperEngine: @unchecked Sendable {
             self?.receive(data)
         }
         state.lock()
-        stopping = false; ready = false; buffer = Data(); stalePublishes = 0; uriGeneration = 0
+        stopping = false; ready = false; buffer = Data(); uriGeneration = 0
         self.process = process
         input = stdin.fileHandleForWriting
         state.unlock()
@@ -221,9 +225,10 @@ final class HarperEngine: @unchecked Sendable {
             return false
         }
         notify("initialized", [:])
-        state.lock(); ready = true; state.unlock()
         // The first document loads Harper's dictionary (~0.2 s); do it now instead of on the first keystroke.
         _ = lintChunk("Nogrammerly is ready.", deadline: deadline)
+        // Ready only now, and `starting` cleared first, so a caller that sees isRunning is never turned away.
+        state.lock(); starting = false; ready = self.process?.isRunning == true; state.unlock()
         Self.status = Self.selection.reason
         return true
     }
@@ -273,12 +278,14 @@ final class HarperEngine: @unchecked Sendable {
 
     // MARK: Linting
 
-    /// Lints `text` and returns suggestions with ranges in `text`, or nil when Harper is not available or
-    /// missed `deadline` (the caller then falls back to the Apple checker for this pass).
+    /// Lints `text` and returns suggestions with ranges in `text`, or nil when Harper is starting, stopped or
+    /// missed `deadline` (the caller then falls back to the Apple checker for this pass). Never spawns the
+    /// sidecar itself and never waits for a start in progress, so a main-thread caller is not held up by one.
     func lint(_ text: String, deadline: Date = Date(timeIntervalSinceNow: 1)) -> [WritingSuggestion]? {
-        guard lintLock.lock(before: deadline) else { return nil }
+        state.lock(); let busyStarting = starting; state.unlock()
+        guard !busyStarting, lintLock.lock(before: deadline) else { return nil }
         defer { lintLock.unlock() }
-        if !isRunning, !startLocked(deadline: deadline) { return nil }
+        guard isRunning else { return nil }
         let nsText = text as NSString
         var results: [WritingSuggestion] = []
         for chunkRange in Self.chunks(of: nsText) {
@@ -294,6 +301,7 @@ final class HarperEngine: @unchecked Sendable {
             }
             results += found.map { $0.shifted(by: chunkRange.location) }
         }
+        Self.status = Self.selection.reason
         return results
     }
 
@@ -311,9 +319,8 @@ final class HarperEngine: @unchecked Sendable {
         guard waiter.semaphore.wait(timeout: .now() + max(0, deadline.timeIntervalSinceNow)) == .success,
               let diagnostics = waiter.value as? [[String: Any]] else {
             // The answer may still arrive. Close this URI and move to a fresh one so it can never be misread.
-            notify("textDocument/didClose", ["textDocument": ["uri": uri]])
-            state.lock(); diagnosticsWaiter = nil; stalePublishes = 0; uriGeneration += 1; state.unlock()
-            documentOpen = false
+            retireDocument(uri)
+            Self.status = "Checks: Apple spelling and grammar for now. Harper did not answer in time."
             return nil
         }
         // Pipeline every code-action request, then collect; a fix that misses the deadline only loses its replacement.
@@ -325,6 +332,13 @@ final class HarperEngine: @unchecked Sendable {
         }
         let actions = ids.map { id in id.flatMap { collect($0, deadline: deadline) } as? [[String: Any]] }
         return HarperMapper.map(diagnostics: diagnostics, actions: actions, in: text)
+    }
+
+    /// Closes `uri` and moves to a fresh one, so any publish still in flight for it is dropped. Caller holds lintLock.
+    private func retireDocument(_ uri: String) {
+        if documentOpen { notify("textDocument/didClose", ["textDocument": ["uri": uri]]) }
+        state.lock(); diagnosticsWaiter = nil; uriGeneration += 1; state.unlock()
+        documentOpen = false
     }
 
     private func remember(_ found: [WritingSuggestion], for chunk: String) {
@@ -365,10 +379,11 @@ final class HarperEngine: @unchecked Sendable {
     private func execute(_ command: String, arguments: (String) -> [Any]) {
         withLintLock {
             guard isRunning else { return }
-            // harper-ls re-publishes the open document after a command (verified: response, then one publish).
-            // If it ever does not, the next lint times out once and moves to a fresh URI.
-            state.lock(); let uri = currentURI; if documentOpen { stalePublishes += 1 }; state.unlock()
+            // harper-ls re-publishes the open document after a command (response first, then the publish), and may
+            // or may not for a closed one. Retire the URI so that publish can never answer the next lint.
+            state.lock(); let uri = currentURI; state.unlock()
             _ = request("workspace/executeCommand", ["command": command, "arguments": arguments(uri)], deadline: Date(timeIntervalSinceNow: 1))
+            retireDocument(uri)
             cache.removeAll(); cacheOrder.removeAll()
         }
     }
@@ -466,11 +481,8 @@ final class HarperEngine: @unchecked Sendable {
         } else if method == "textDocument/publishDiagnostics",
                   let params = message["params"] as? [String: Any] {
             state.lock()
-            if params["uri"] as? String != currentURI {
-                // A late answer for a URI that was closed after a timeout: drop it.
-            } else if stalePublishes > 0 {
-                stalePublishes -= 1
-            } else if let waiter = diagnosticsWaiter {
+            // Publishes for a retired URI, or with nobody waiting, are not an answer to anything: drop them.
+            if params["uri"] as? String == currentURI, let waiter = diagnosticsWaiter {
                 diagnosticsWaiter = nil
                 waiter.value = params["diagnostics"] as? [[String: Any]] ?? []
                 waiter.semaphore.signal()
