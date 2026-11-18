@@ -39,6 +39,35 @@ struct HarperBenchmarkTests {
         return json.compactMapValues { $0 as? [String] }
     }()
 
+    /// The intended word for each misspelling in the error corpus.
+    static let spellingFixes: [String: String] = {
+        let url = Bundle.module.url(forResource: "corpus", withExtension: "json", subdirectory: "Fixtures")!
+        let json = try! JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any]
+        return json["spelling_fixes"] as? [String: String] ?? [:]
+    }()
+
+    /// First suggested replacement for each corpus misspelling: Harper alone vs analyze() (Harper + Apple's corrections).
+    @Test func spellingSuggestionAccuracy() throws {
+        let engine = try HarperTestSupport.makeEngine(); defer { engine.stop() }
+        var harperRight = 0, analyzeRight = 0, flagged = 0
+        var detail: [String] = []
+        for text in Self.corpus["errors"]! {
+            let raw = try #require(engine.lint(text, deadline: HarperTestSupport.patient()))
+            let analyzed = WritingEngine.analyze(text, harper: engine).suggestions
+            #expect(engine.lastLintSucceeded)
+            for item in raw where item.isSpelling {
+                guard let expected = Self.spellingFixes[item.original] else { continue }
+                flagged += 1
+                let final = analyzed.first { $0.range == item.range }?.replacement
+                if item.replacement == expected { harperRight += 1 }
+                if final == expected { analyzeRight += 1 }
+                detail.append("\(item.original): harper \(item.replacement ?? "-") -> final \(final ?? "-") (want \(expected))")
+            }
+        }
+        Self.report("spelling_accuracy", ["misspellings_flagged": flagged, "harper_first_suggestion_right": harperRight,
+                                          "with_apple_correction_right": analyzeRight, "detail": detail])
+    }
+
     @Test func latencyAndMemory() throws {
         // Cold: spawn + initialize + first document (dictionary load).
         var engine: HarperEngine!

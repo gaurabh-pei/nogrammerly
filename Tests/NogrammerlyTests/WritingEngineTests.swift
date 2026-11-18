@@ -17,6 +17,31 @@ import Testing
         #expect(WritingEngine.analyze("The meeting starts at noon.").suggestions.isEmpty)
     }
 
+    static func harperSpelling(_ word: String, _ replacement: String, in text: String) -> WritingSuggestion {
+        WritingSuggestion(kind: .correctness, title: "Spell Check (Harper)",
+                          explanation: "Did you mean to spell “\(word)” this way? Replace with “\(replacement)”.",
+                          original: word, replacement: replacement, range: (text as NSString).range(of: word), isSpelling: true)
+    }
+
+    @Test func appleCorrectionReplacesWeakHarperSuggestion() throws {
+        let text = "We need acess to the building on wenesday."
+        let fixed = WritingEngine.preferAppleCorrections([Self.harperSpelling("acess", "ace's", in: text), Self.harperSpelling("wenesday", "weekday", in: text)], in: text)
+        #expect(fixed.map(\.replacement) == ["access", "Wednesday"])
+        let first = try #require(fixed.first)
+        #expect(first.range == (text as NSString).range(of: "acess") && first.isSpelling)
+        #expect(first.explanation.contains("Replace with “access”") && first.explanation.contains("Also: “ace's”"))
+    }
+
+    @Test func harperKeepsWordsAppleAcceptsAndNonSpelling() {
+        let text = "We shipped it, irregardless of the delay."
+        let harper = Self.harperSpelling("irregardless", "regardless", in: text)
+        let grammar = WritingSuggestion(kind: .correctness, title: "Its Contraction (Harper)", explanation: "x", original: "shipped",
+                                        replacement: "ship", range: (text as NSString).range(of: "shipped"))
+        let apple = WritingSuggestion(kind: .correctness, title: "Spelling", explanation: "x", original: "irregardless",
+                                      replacement: "irregardless", range: (text as NSString).range(of: "irregardless"), isSpelling: true)
+        #expect(WritingEngine.preferAppleCorrections([harper, grammar, apple], in: text) == [harper, grammar, apple])
+    }
+
     @Test func wordRangesMatchWholeWordsOnly() {
         #expect(WritingEngine.wordRanges(of: "just", in: "Just adjust it, just now.") == [NSRange(location: 0, length: 4), NSRange(location: 16, length: 4)])
     }
