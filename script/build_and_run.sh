@@ -20,6 +20,14 @@ mkdir -p "$APP_MACOS" "$APP_BUNDLE/Contents/Resources"
 cp "$BUILD_BINARY" "$APP_MACOS/$APP_NAME"
 cp "$ICON_FILE" "$APP_BUNDLE/Contents/Resources/Nogrammerly.icns"
 chmod +x "$APP_MACOS/$APP_NAME"
+# Opt-in: NOGRAMMERLY_BUNDLE_HARPER=1 bundles the pinned harper-ls (Apache-2.0) as Contents/Helpers/harper-ls,
+# which makes Harper the default checker. Without it the app is built exactly as before (Apple checker).
+if [[ "${NOGRAMMERLY_BUNDLE_HARPER:-0}" == "1" ]]; then
+  "$ROOT_DIR/script/fetch_harper_ls.sh"
+  mkdir -p "$APP_BUNDLE/Contents/Helpers" "$APP_BUNDLE/Contents/Resources/Harper"
+  cp "$ROOT_DIR/Vendor/harper-ls/bin/harper-ls" "$APP_BUNDLE/Contents/Helpers/harper-ls"
+  cp "$ROOT_DIR/Vendor/harper-ls/LICENSE" "$ROOT_DIR/Vendor/harper-ls/NOTICE" "$APP_BUNDLE/Contents/Resources/Harper/"
+fi
 cat >"$INFO_PLIST" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -29,11 +37,14 @@ PLIST
 # Run script/create_signing_identity.sh once to create it; ad-hoc signing works but loses the permission on every build.
 SIGNING_IDENTITY="Nogrammerly Local Signing"
 if security find-certificate -c "$SIGNING_IDENTITY" >/dev/null 2>&1; then
-  codesign --force --deep --sign "$SIGNING_IDENTITY" "$APP_BUNDLE"
+  SIGN_AS="$SIGNING_IDENTITY"
 else
   echo "warning: \"$SIGNING_IDENTITY\" not found; signing ad-hoc (Accessibility must be re-granted after each build). Run script/create_signing_identity.sh." >&2
-  codesign --force --deep --sign - "$APP_BUNDLE"
+  SIGN_AS="-"
 fi
+# A loose executable in Contents/Helpers is not picked up by --deep; sign it first.
+[[ -f "$APP_BUNDLE/Contents/Helpers/harper-ls" ]] && codesign --force --sign "$SIGN_AS" "$APP_BUNDLE/Contents/Helpers/harper-ls"
+codesign --force --deep --sign "$SIGN_AS" "$APP_BUNDLE"
 
 case "$MODE" in
   run) /usr/bin/open -n "$APP_BUNDLE" ;;
