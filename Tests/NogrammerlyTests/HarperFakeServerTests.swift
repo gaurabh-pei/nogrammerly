@@ -54,6 +54,25 @@ struct HarperFakeServerTests {
         #expect(engine.lint("Look at teh numbers.", deadline: HarperTestSupport.patient())?.map(\.original) == ["teh"])
     }
 
+    /// An observer that checks text as soon as Harper is ready (as the app does) must get Harper's answer, not wait
+    /// for a lock the engine holds while it announces readiness.
+    @Test func readyObserverCanLintImmediately() throws {
+        let engine = try FakeHarper.engine("normal"); defer { engine.stop() }
+        let answer = Locked<[String]?>(nil)
+        let elapsed = Locked<TimeInterval>(-1)
+        let queue = OperationQueue()
+        let observer = NotificationCenter.default.addObserver(forName: HarperEngine.didBecomeReady, object: engine, queue: queue) { _ in
+            let start = Date()
+            answer.set(engine.lint("Look at teh numbers.")?.map(\.original))
+            elapsed.set(Date().timeIntervalSince(start))
+        }
+        defer { NotificationCenter.default.removeObserver(observer) }
+        try #require(engine.start(timeout: HarperTestSupport.patience))
+        #expect(HarperTestSupport.waitUntil(5) { elapsed.get() >= 0 })
+        #expect(answer.get() == ["teh"])
+        #expect(elapsed.get() < 0.5)
+    }
+
     /// Fixes that miss the deadline leave the finding without a replacement for that pass, and are not cached.
     @Test func incompleteFixesAreRetriedNotCached() throws {
         let engine = try FakeHarper.engine("slow-actions"); defer { engine.stop() }

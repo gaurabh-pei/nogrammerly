@@ -50,13 +50,19 @@ final class HarperEngine: @unchecked Sendable {
     /// Posted when the sidecar becomes ready, so fields analysed with the Apple fallback meanwhile can be re-checked.
     static let didBecomeReady = Notification.Name("HarperEngineDidBecomeReady")
     private static let statusLock = NSLock()
+    /// Notifications go out from here, never from the thread that changed state: a queue-bound observer makes
+    /// `post` wait for it, and that thread may hold `lintLock` while the main thread is waiting for the lock.
+    private static let notificationQueue = DispatchQueue(label: "nogrammerly.harper.notifications")
+    private static func post(_ name: Notification.Name, object: Any? = nil) {
+        notificationQueue.async { NotificationCenter.default.post(name: name, object: object) }
+    }
     nonisolated(unsafe) private static var _status = selection.reason
     /// One visible line describing which checker is running. The app shows it; fallbacks are never silent.
     static var status: String {
         get { statusLock.lock(); defer { statusLock.unlock() }; return _status }
         set {
             statusLock.lock(); let changed = _status != newValue; _status = newValue; statusLock.unlock()
-            if changed { NotificationCenter.default.post(name: statusDidChange, object: nil) }
+            if changed { post(statusDidChange) }
         }
     }
 
@@ -242,7 +248,7 @@ final class HarperEngine: @unchecked Sendable {
         state.lock(); starting = false; ready = self.process?.isRunning == true; let isReady = ready; state.unlock()
         guard isReady else { return false }
         Self.status = Self.selection.reason
-        NotificationCenter.default.post(name: Self.didBecomeReady, object: self)
+        Self.post(Self.didBecomeReady, object: self)
         return true
     }
 
