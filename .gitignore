@@ -19,3 +19,6 @@ windows/**/obj/
 # Xcode per-user state
 xcuserdata/
 *.xcresult
+
+# harper-ls binary fetched by script/fetch_harper_ls.sh (pinned in Vendor/harper-ls/harper-ls.pin)
+Vendor/harper-ls/bin/

@@ -1,0 +1,11 @@
+Nogrammerly bundles harper-ls 3.2.0, part of Harper (https://github.com/Automattic/harper).
+
+Harper is Copyright Automattic and the Harper contributors, licensed under the
+Apache License, Version 2.0 (see LICENSE in this directory). The upstream project
+does not ship a NOTICE file; this file records the attribution required by
+section 4 of the Apache License.
+
+The harper-ls binary is redistributed unmodified from the official release asset
+harper-ls-aarch64-apple-darwin.tar.gz (sha256 in harper-ls.pin). Nogrammerly talks
+to it over the Language Server Protocol on stdin/stdout; no Harper source code is
+compiled into Nogrammerly itself.
