@@ -45,9 +45,10 @@ enum HarperMapper {
     // MARK: harper-ls 3.2.0 code-action range workaround
     //
     // harper-ls reports diagnostics and edits in UTF-16 code units (correct), but reads the *request* range of
-    // `textDocument/codeAction` as Unicode-scalar offsets. After an emoji or other astral character the two differ,
-    // and a request with the diagnostic's own range returns no actions. Requesting the union of both readings
-    // works whether or not the bug is fixed upstream; `actions(_:for:in:)` then keeps only this diagnostic's group.
+    // `textDocument/codeAction` as Unicode-scalar offsets (https://github.com/Automattic/harper/issues/4992). After
+    // emoji or other astral characters the two differ, and once the drift exceeds the flagged span a request with the
+    // diagnostic's own range returns no actions. Requesting the union of both readings works whether or not the bug
+    // is fixed upstream; `actions(_:for:in:)` then keeps only this diagnostic's group.
 
     /// LSP range to send with `textDocument/codeAction` for `diagnosticRange`: union of UTF-16 and scalar readings.
     static func codeActionRange(for diagnosticRange: JSON?, in text: NSString, lineStarts starts: [Int]) -> JSON? {
