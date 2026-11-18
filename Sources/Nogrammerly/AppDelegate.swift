@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource,
     private let statusLabel = NSTextField(labelWithString: "")
     private let rewriteButton = NSButton()
     private let settingsButton = NSButton(title: "Settings…", target: nil, action: nil)
+    private let checkerStatus = NSTextField(wrappingLabelWithString: HarperEngine.status)
     private let toneControl = NSSegmentedControl(labels: WritingTone.allCases.map(\.rawValue), trackingMode: .selectOne, target: nil, action: nil)
     private var suggestions: [WritingSuggestion] = []
     private var proofreadTask: Task<Void, Never>?
@@ -30,6 +31,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource,
         NSApp.setActivationPolicy(AppPreferences().activationPolicy)
         NSApp.mainMenu = makeMainMenu()
         AIWriter.prewarm()
+        if let harper = HarperEngine.shared { DispatchQueue.global(qos: .userInitiated).async { harper.start() } }
+        NotificationCenter.default.addObserver(forName: HarperEngine.statusDidChange, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.checkerStatus.stringValue = "✦  " + HarperEngine.status }
+        }
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1220, height: 780), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         window.title = "Nogrammerly"
         window.isReleasedWhenClosed = false
@@ -54,6 +59,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource,
         // exception that AppKit swallows, skipping the rest of this method. Analyse the sample text last,
         // on a later run-loop pass, so it can never stop everywhere mode from starting.
         DispatchQueue.main.async { [weak self] in self?.refreshAnalysis() }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        HarperEngine.shared?.stop()
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -82,8 +91,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource,
         settingsButton.target = self; settingsButton.action = #selector(showSettings)
         let engine = NSTextField(wrappingLabelWithString: AIWriter.isAvailable ? "✦  AI checks: Apple on-device model" : "✦  AI checks off: turn on Apple Intelligence in System Settings for grammar, tone and rewrites."); engine.textColor = .secondaryLabelColor; engine.font = .systemFont(ofSize: 12)
         let privacy = NSTextField(wrappingLabelWithString: "◎  Everywhere mode checks your writing in Slack, Notes, Zoom and most other apps. Click the round button in the corner of the field you're typing in, or right-click an underline. Your text stays on this Mac."); privacy.textColor = .secondaryLabelColor; privacy.font = .systemFont(ofSize: 12)
-        let stack = NSStackView(views: [logo, newDoc, NSView(), settingsButton, engine, privacy]); stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 16; stack.translatesAutoresizingMaskIntoConstraints = false
-        panel.addSubview(stack); NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo: panel.leadingAnchor, constant: 18), stack.trailingAnchor.constraint(equalTo: panel.trailingAnchor, constant: -18), stack.topAnchor.constraint(equalTo: panel.topAnchor, constant: 22), stack.bottomAnchor.constraint(equalTo: panel.bottomAnchor, constant: -22), newDoc.widthAnchor.constraint(equalTo: stack.widthAnchor), settingsButton.widthAnchor.constraint(equalTo: stack.widthAnchor), privacy.widthAnchor.constraint(equalTo: stack.widthAnchor)])
+        checkerStatus.stringValue = "✦  " + HarperEngine.status; checkerStatus.textColor = .secondaryLabelColor; checkerStatus.font = .systemFont(ofSize: 12)
+        let stack = NSStackView(views: [logo, newDoc, NSView(), settingsButton, engine, checkerStatus, privacy]); stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 16; stack.translatesAutoresizingMaskIntoConstraints = false
+        panel.addSubview(stack); NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo: panel.leadingAnchor, constant: 18), stack.trailingAnchor.constraint(equalTo: panel.trailingAnchor, constant: -18), stack.topAnchor.constraint(equalTo: panel.topAnchor, constant: 22), stack.bottomAnchor.constraint(equalTo: panel.bottomAnchor, constant: -22), newDoc.widthAnchor.constraint(equalTo: stack.widthAnchor), settingsButton.widthAnchor.constraint(equalTo: stack.widthAnchor), privacy.widthAnchor.constraint(equalTo: stack.widthAnchor), checkerStatus.widthAnchor.constraint(equalTo: stack.widthAnchor)])
         return panel
     }
 
@@ -232,7 +242,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource,
 
     private func refreshAnalysis() {
         let text = editor.string
-        let result = WritingEngine.analyze(text)
+        let result = MacWritingEngine.analyze(text)
         show(result.suggestions, words: result.words, readability: result.readability, tone: result.tone)
         proofreadTask?.cancel()
         proofreadTask = Task { [weak self] in

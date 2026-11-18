@@ -96,7 +96,7 @@ final class SystemWritingAssistant: NSObject, NSMenuDelegate {
         if element == nil || !CFEqual(element, focused) || value != text {
             element = focused
             text = value
-            suggestions = WritingEngine.analyze(value).suggestions.filter { !ignored.contains($0.ignoreKey) }
+            suggestions = MacWritingEngine.analyze(value).suggestions.filter { !ignored.contains($0.ignoreKey) }
             scheduleProofread(of: value)
         }
         layoutMarks()
@@ -398,6 +398,7 @@ final class SystemWritingAssistant: NSObject, NSMenuDelegate {
     @objc private func learnWord(_ sender: NSMenuItem) {
         guard let suggestion = suggestion(for: sender) else { return }
         NSSpellChecker.shared.learnWord(suggestion.original)
+        if let harper = HarperEngine.shared { DispatchQueue.global(qos: .utility).async { harper.addToDictionary(suggestion.original) } }
         suggestions.removeAll { $0.isSpelling && $0.original == suggestion.original }
         layoutMarks()
     }

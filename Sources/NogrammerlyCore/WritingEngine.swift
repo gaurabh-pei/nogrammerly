@@ -25,6 +25,13 @@ public enum WritingEngine {
     ]
 
     public static func analyze(_ text: String) -> WritingAnalysis {
+        analyze(text, primary: [], systemChecker: true)
+    }
+
+    /// The same analysis with findings from another checker in front: `primary` wins where it overlaps the phrase
+    /// rules, which fill in what it does not cover. `systemChecker` false leaves the system dictionary out.
+    /// The macOS app uses this for its optional Harper sidecar; `analyze(_:)` is `primary: [], systemChecker: true`.
+    public static func analyze(_ text: String, primary: [WritingSuggestion], systemChecker: Bool) -> WritingAnalysis {
         let nsText = text as NSString
         var suggestions: [WritingSuggestion] = []
         for rule in styleRules {
@@ -53,7 +60,8 @@ public enum WritingEngine {
         let words = text.split { $0.isWhitespace }.count
         let avg = words / max(sentenceCount, 1)
         // Specific phrase rules win over the dictionary where they overlap (e.g. "utilize" → "use", not "utilise").
-        let unique = merge(suggestions, checkSpellingAndGrammar(text))
+        let local = systemChecker ? merge(suggestions, checkSpellingAndGrammar(text)) : suggestions
+        let unique = primary.isEmpty ? local : merge(primary, local)
         let readability = max(35, min(100, 100 - max(avg - 12, 0) * 3 - unique.count * 2))
         let tone = text.contains("!") ? "Enthusiastic" : text.lowercased().contains("please") ? "Polite" : "Neutral"
         return WritingAnalysis(suggestions: unique, words: words, readability: readability, tone: tone)
