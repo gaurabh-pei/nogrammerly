@@ -1,0 +1,1918 @@
+{
+ "server": {
+  "name": "harper-ls",
+  "version": "3.2.0"
+ },
+ "cases": {
+  "sample-email": {
+   "text": "Hello team,\n\nI wanted to recieve your feedback on the proposal. We utilize the new workflow in order to make our approvals faster, and I think it will be very helpful!!\n\nThank you",
+   "publishDiagnostics": {
+    "diagnostics": [
+     {
+      "code": "SpellCheck",
+      "message": "Did you mean to spell `recieve` this way?",
+      "range": {
+       "end": {
+        "character": 19,
+        "line": 2
+       },
+       "start": {
+        "character": 12,
+        "line": 2
+       }
+      },
+      "severity": 4,
+      "source": "Harper"
+     }
+    ],
+    "uri": "file:///nogrammerly/focused.txt"
+   },
+   "codeActions": [
+    [
+     {
+      "edit": {
+       "changes": {
+        "file:///nogrammerly/focused.txt": [
+         {
+          "newText": "receive",
+          "range": {
+           "end": {
+            "character": 19,
+            "line": 2
+           },
+           "start": {
+            "character": 12,
+            "line": 2
+           }
+          }
+         }
+        ]
+       }
+      },
+      "kind": "quickfix",
+      "title": "Replace with: “receive”"
+     },
+     {
+      "edit": {
+       "changes": {
+        "file:///nogrammerly/focused.txt": [
+         {
+          "newText": "relieve",
+          "range": {
+           "end": {
+            "character": 19,
+            "line": 2
+           },
+           "start": {
+            "character": 12,
+            "line": 2
+           }
+          }
+         }
+        ]
+       }
+      },
+      "kind": "quickfix",
+      "title": "Replace with: “relieve”"
+     },
+     {
+      "edit": {
+       "changes": {
+        "file:///nogrammerly/focused.txt": [
+         {
+          "newText": "recipe",
+          "range": {
+           "end": {
+            "character": 19,
+            "line": 2
+           },
+           "start": {
+            "character": 12,
+            "line": 2
+           }
+          }
+         }
+        ]
+       }
+      },
+      "kind": "quickfix",
+      "title": "Replace with: “recipe”"
+     },
+     {
+      "arguments": [
+       "file:///nogrammerly/focused.txt",
+       {
+        "lint_kind": "Spelling",
+        "message": "Did you mean to spell `recieve` this way?",
+        "priority": 63,
+        "span": {
+         "end": 32,
+         "start": 25
+        },
+        "suggestions": [
+         {
+          "ReplaceWith": [
+           "r",
+           "e",
+           "c",
+           "e",
+           "i",
+           "v",
+           "e"
+          ]
+         },
+         {
+          "ReplaceWith": [
+           "r",
+           "e",
+           "l",
+           "i",
+           "e",
+           "v",
+           "e"
+          ]
+         },
+         {
+          "ReplaceWith": [
+           "r",
+           "e",
+           "c",
+           "i",
+           "p",
+           "e"
+          ]
+         }
+        ]
+       }
+      ],
+      "command": "HarperIgnoreLint",
+      "title": "Ignore Harper error."
+     },
+     {
+      "arguments": [
+       "recieve",
+       "file:///nogrammerly/focused.txt"
+      ],
+      "command": "HarperAddToUserDict",
+      "title": "Add \"recieve\" to the user dictionary."
+     },
+     {
+      "arguments": [
+       "recieve",
+       "file:///nogrammerly/focused.txt"
+      ],
+      "command": "HarperAddToWSDict",
+      "title": "Add \"recieve\" to the workspace dictionary."
+     },
+     {
+      "arguments": [
+       "recieve",
+       "file:///nogrammerly/focused.txt"
+      ],
+      "command": "HarperAddToFileDict",
+      "title": "Add \"recieve\" to the file dictionary."
+     }
+    ]
+   ]
+  },
+  "emoji-accents": {
+   "text": "Café 😀 naïve résumé: i dont thinkk its a a problem 👍🏽 teh end.",
+   "publishDiagnostics": {
+    "diagnostics": [
+     {
+      "code": "CapitalizePersonalPronouns",
+      "message": "The first-person singular subject pronoun must be capitalized.",
+      "range": {
+       "end": {
+        "character": 23,
+        "line": 0
+       },
+       "start": {
+        "character": 22,
+        "line": 0
+       }
+      },
+      "severity": 4,
+      "source": "Harper"
+     },
+     {
+      "code": "ItsContraction",
+      "message": "Use `it's` (short for `it has` or `it is`) here, not the possessive `its`.",
+      "range": {
+       "end": {
+        "character": 39,
+        "line": 0
+       },
+       "start": {
+        "character": 36,
+        "line": 0
+       }
+      },
+      "severity": 4,
+      "source": "Harper"
+     },
+     {
+      "code": "RepeatedWords",
+      "message": "Did you mean to repeat this word?",
+      "range": {
+       "end": {
+        "character": 43,
+        "line": 0
+       },
+       "start": {
+        "character": 40,
+        "line": 0
+       }
+      },
+      "severity": 4,
+      "source": "Harper"
+     },
+     {
+      "code": "SpellCheck",
+      "message": "Did you mean to spell `dont` this way?",
+      "range": {
+       "end": {
+        "character": 28,
+        "line": 0
+       },
+       "start": {
+        "character": 24,
+        "line": 0
+       }
+      },
+      "severity": 4,
+      "source": "Harper"
+     },
+     {
+      "code": "SpellCheck",
+      "message": "Did you mean to spell `thinkk` this way?",
+      "range": {
+       "end": {
+        "character": 35,
+        "line": 0
+       },
+       "start": {
+        "character": 29,
+        "line": 0
+       }
+      },
+      "severity": 4,
+      "source": "Harper"
+     },
+     {
+      "code": "The",
+      "message": "Did you mean the definite article?",
+      "range": {
+       "end": {
+        "character": 60,
+        "line": 0
+       },
+       "start": {
+        "character": 57,
+        "line": 0
+       }
+      },
+      "severity": 4,
+      "source": "Harper"
+     }
+    ],
+    "uri": "file:///nogrammerly/focused.txt"
+   },
+   "codeActions": [
+    [
+     {
+      "edit": {
+       "changes": {
+        "file:///nogrammerly/focused.txt": [
+         {
+          "newText": "I",
+          "range": {
+           "end": {
+            "character": 23,
+            "line": 0
+           },
+           "start": {
+            "character": 22,
+            "line": 0
+           }
+          }
+         }
+        ]
+       }
+      },
+      "kind": "quickfix",
+      "title": "Replace with: “I”"
+     },
+     {
+      "arguments": [
+       "file:///nogrammerly/focused.txt",
+       {
+        "lint_kind": "Capitalization",
+        "message": "The first-person singular subject pronoun must be capitalized.",
+        "priority": 31,
+        "span": {
+         "end": 22,
+         "start": 21
+        },
+        "suggestions": [
+         {
+          "ReplaceWith": [
+           "I"
+          ]
+         }
+        ]
+       }
+      ],
+      "command": "HarperIgnoreLint",
+      "title": "Ignore Harper error."
+     }
+    ],
+    [
+     {
+      "edit": {
+       "changes": {
+        "file:///nogrammerly/focused.txt": [
+         {
+          "newText": "it's",
+          "range": {
+           "end": {
+            "character": 39,
+            "line": 0
+           },
+           "start": {
+            "character": 36,
+            "line": 0
+           }
+          }
+         }
+        ]
+       }
+      },
+      "kind": "quickfix",
+      "title": "Replace with: “it's”"
+     },
+     {
+      "edit": {
+       "changes": {
+        "file:///nogrammerly/focused.txt": [
+         {
+          "newText": "it has",
+          "range": {
+           "end": {
+            "character": 39,
+            "line": 0
+           },
+           "start": {
+            "character": 36,
+            "line": 0
+           }
+          }
+         }
+        ]
+       }
+      },
+      "kind": "quickfix",
+      "title": "Replace with: “it has”"
+     },
+     {
+      "arguments": [
+       "file:///nogrammerly/focused.txt",
+       {
+        "lint_kind": "Punctuation",
+        "message": "Use `it's` (short for `it has` or `it is`) here, not the possessive `its`.",
+        "priority": 54,
+        "span": {
+         "end": 38,
+         "start": 35
+        },
+        "suggestions": [
+         {
+          "ReplaceWith": [
+           "i",
+           "t",
+           "'",
+           "s"
+          ]
+         },
+         {
+          "ReplaceWith": [
+           "i",
+           "t",
+           " ",
+           "h",
+           "a",
+           "s"
+          ]
+         }
+        ]
+       }
+      ],
+      "command": "HarperIgnoreLint",
+      "title": "Ignore Harper error."
+     }
+    ],
+    [
+     {
+      "edit": {
+       "changes": {
+        "file:///nogrammerly/focused.txt": [
+         {
+          "newText": "an",
+          "range": {
+           "end": {
+            "character": 41,
+            "line": 0
+           },
+           "start": {
+            "character": 40,
+            "line": 0
+           }
+          }
+         }
+        ]
+       }
+      },
+      "kind": "quickfix",
+      "title": "Replace with: “an”"
+     },
+     {
+      "arguments": [
+       "file:///nogrammerly/focused.txt",
+       {
+        "lint_kind": "Miscellaneous",
+        "message": "Incorrect indefinite article.",
+        "priority": 31,
+        "span": {
+         "end": 40,
+         "start": 39
+        },
+        "suggestions": [
+         {
+          "ReplaceWith": [
+           "a",
+           "n"
+          ]
+         }
+        ]
+       }
+      ],
+      "command": "HarperIgnoreLint",
+      "title": "Ignore Harper error."
+     },
+     {
+      "edit": {
+       "changes": {
+        "file:///nogrammerly/focused.txt": [
+         {
+          "newText": "a",
+          "range": {
+           "end": {
+            "character": 43,
+            "line": 0
+           },
+           "start": {
+            "character": 40,
+            "line": 0
+           }
+          }
+         }
+        ]
+       }
+      },
+      "kind": "quickfix",
+      "title": "Replace with: “a”"
+     },
+     {
+      "arguments": [
+       "file:///nogrammerly/focused.txt",
+       {
+        "lint_kind": "Repetition",
+        "message": "Did you mean to repeat this word?",
+        "priority": 128,
+        "span": {
+         "end": 42,
+         "start": 39
+        },
+        "suggestions": [
+         {
+          "ReplaceWith": [
+           "a"
+          ]
+         }
+        ]
+       }
+      ],
+      "command": "HarperIgnoreLint",
+      "title": "Ignore Harper error."
+     }
+    ],
+    [
+     {
+      "edit": {
+       "changes": {
+        "file:///nogrammerly/focused.txt": [
+         {
+          "newText": "don't",
+          "range": {
+           "end": {
+            "character": 28,
+            "line": 0
+           },
+           "start": {
+            "character": 24,
+            "line": 0
+           }
+          }
+         }
+        ]
+       }
+      },
+      "kind": "quickfix",
+      "title": "Replace with: “don't”"
+     },
+     {
+      "edit": {
+       "changes": {
+        "file:///nogrammerly/focused.txt": [
+         {
+          "newText": "dent",
+          "range": {
+           "end": {
+            "character": 28,
+            "line": 0
+           },
+           "start": {
+            "character": 24,
+            "line": 0
+           }
+          }
+         }
+        ]
+       }
+      },
+      "kind": "quickfix",
+      "title": "Replace with: “dent”"
+     },
+     {
+      "edit": {
+       "changes": {
+        "file:///nogrammerly/focused.txt": [
+         {
+          "newText": "don",
+          "range": {
+           "end": {
+            "character": 28,
+            "line": 0
+           },
+           "start": {
+            "character": 24,
+            "line": 0
+           }
+          }
+         }
+        ]
+       }
+      },
+      "kind": "quickfix",
+      "title": "Replace with: “don”"
+     },
+     {
+      "arguments": [
+       "file:///nogrammerly/focused.txt",
+       {
+        "lint_kind": "Spelling",
+        "message": "Did you mean to spell `dont` this way?",
+        "priority": 63,
+        "span": {
+         "end": 27,
+         "start": 23
+        },
+        "suggestions": [
+         {
+          "ReplaceWith": [
+           "d",
+           "o",
+           "n",
+           "'",
+           "t"
+          ]
+         },
+         {
+          "ReplaceWith": [
+           "d",
+           "e",
+           "n",
+           "t"
+          ]
+         },
+         {
+          "ReplaceWith": [
+           "d",
+           "o",
+           "n"
+          ]
+         }
+        ]
+       }
+      ],
+      "command": "HarperIgnoreLint",
+      "title": "Ignore Harper error."
+     },
+     {
+      "arguments": [
+       "dont",
+       "file:///nogrammerly/focused.txt"
+      ],
+      "command": "HarperAddToUserDict",
+      "title": "Add \"dont\" to the user dictionary."
+     },
+     {
+      "arguments": [
+       "dont",
+       "file:///nogrammerly/focused.txt"
+      ],
+      "command": "HarperAddToWSDict",
+      "title": "Add \"dont\" to the workspace dictionary."
+     },
+     {
+      "arguments": [
+       "dont",
+       "file:///nogrammerly/focused.txt"
+      ],
+      "command": "HarperAddToFileDict",
+      "title": "Add \"dont\" to the file dictionary."
+     }
+    ],
+    [
+     {
+      "edit": {
+       "changes": {
+        "file:///nogrammerly/focused.txt": [
+         {
+          "newText": "think",
+          "range": {
+           "end": {
+            "character": 35,
+            "line": 0
+           },
+           "start": {
+            "character": 29,
+            "line": 0
+           }
+          }
+         }
+        ]
+       }
+      },
+      "kind": "quickfix",
+      "title": "Replace with: “think”"
+     },
+     {
+      "edit": {
+       "changes": {
+        "file:///nogrammerly/focused.txt": [
+         {
+          "newText": "thinks",
+          "range": {
+           "end": {
+            "character": 35,
+            "line": 0
+           },
+           "start": {
+            "character": 29,
+            "line": 0
+           }
+          }
+         }
+        ]
+       }
+      },
+      "kind": "quickfix",
+      "title": "Replace with: “thinks”"
+     },
+     {
+      "edit": {
+       "changes": {
+        "file:///nogrammerly/focused.txt": [
+         {
+          "newText": "think's",
+          "range": {
+           "end": {
+            "character": 35,
+            "line": 0
+           },
+           "start": {
+            "character": 29,
+            "line": 0
+           }
+          }
+         }
+        ]
+       }
+      },
+      "kind": "quickfix",
+      "title": "Replace with: “think's”"
+     },
+     {
+      "arguments": [
+       "file:///nogrammerly/focused.txt",
+       {
+        "lint_kind": "Spelling",
+        "message": "Did you mean to spell `thinkk` this way?",
+        "priority": 63,
+        "span": {
+         "end": 34,
+         "start": 28
+        },
+        "suggestions": [
+         {
+          "ReplaceWith": [
+           "t",
+           "h",
+           "i",
+           "n",
+           "k"
+          ]
+         },
+         {
+          "ReplaceWith": [
+           "t",
+           "h",
+           "i",
+           "n",
+           "k",
+           "s"
+          ]
+         },
+         {
+          "ReplaceWith": [
+           "t",
+           "h",
+           "i",
+           "n",
+           "k",
+           "'",
+           "s"
+          ]
+         }
+        ]
+       }
+      ],
+      "command": "HarperIgnoreLint",
+      "title": "Ignore Harper error."
+     },
+     {
+      "arguments": [
+       "thinkk",
+       "file:///nogrammerly/focused.txt"
+      ],
+      "command": "HarperAddToUserDict",
+      "title": "Add \"thinkk\" to the user dictionary."
+     },
+     {
+      "arguments": [
+       "thinkk",
+       "file:///nogrammerly/focused.txt"
+      ],
+      "command": "HarperAddToWSDict",
+      "title": "Add \"thinkk\" to the workspace dictionary."
+     },
+     {
+      "arguments": [
+       "thinkk",
+       "file:///nogrammerly/focused.txt"
+      ],
+      "command": "HarperAddToFileDict",
+      "title": "Add \"thinkk\" to the file dictionary."
+     }
+    ],
+    [
+     {
+      "edit": {
+       "changes": {
+        "file:///nogrammerly/focused.txt": [
+         {
+          "newText": "the",
+          "range": {
+           "end": {
+            "character": 60,
+            "line": 0
+           },
+           "start": {
+            "character": 57,
+            "line": 0
+           }
+          }
+         }
+        ]
+       }
+      },
+      "kind": "quickfix",
+      "title": "Replace with: “the”"
+     },
+     {
+      "arguments": [
+       "file:///nogrammerly/focused.txt",
+       {
+        "lint_kind": "Typo",
+        "message": "Did you mean the definite article?",
+        "priority": 31,
+        "span": {
+         "end": 57,
+         "start": 54
+        },
+        "suggestions": [
+         {
+          "ReplaceWith": [
+           "t",
+           "h",
+           "e"
+          ]
+         }
+        ]
+       }
+      ],
+      "command": "HarperIgnoreLint",
+      "title": "Ignore Harper error."
+     },
+     {
+      "edit": {
+       "changes": {
+        "file:///nogrammerly/focused.txt": [
+         {
+          "newText": "the",
+          "range": {
+           "end": {
+            "character": 60,
+            "line": 0
+           },
+           "start": {
+            "character": 57,
+            "line": 0
+           }
+          }
+         }
+        ]
+       }
+      },
+      "kind": "quickfix",
+      "title": "Replace with: “the”"
+     },
+     {
+      "edit": {
+       "changes": {
+        "file:///nogrammerly/focused.txt": [
+         {
+          "newText": "tea",
+          "range": {
+           "end": {
+            "character": 60,
+            "line": 0
+           },
+           "start": {
+            "character": 57,
+            "line": 0
+           }
+          }
+         }
+        ]
+       }
+      },
+      "kind": "quickfix",
+      "title": "Replace with: “tea”"
+     },
+     {
+      "edit": {
+       "changes": {
+        "file:///nogrammerly/focused.txt": [
+         {
+          "newText": "tech",
+          "range": {
+           "end": {
+            "character": 60,
+            "line": 0
+           },
+           "start": {
+            "character": 57,
+            "line": 0
+           }
+          }
+         }
+        ]
+       }
+      },
+      "kind": "quickfix",
+      "title": "Replace with: “tech”"
+     },
+     {
+      "arguments": [
+       "file:///nogrammerly/focused.txt",
+       {
+        "lint_kind": "Spelling",
+        "message": "Did you mean to spell `teh` this way?",
+        "priority": 63,
+        "span": {
+         "end": 57,
+         "start": 54
+        },
+        "suggestions": [
+         {
+          "ReplaceWith": [
+           "t",
+           "h",
+           "e"
+          ]
+         },
+         {
+          "ReplaceWith": [
+           "t",
+           "e",
+           "a"
+          ]
+         },
+         {
+          "ReplaceWith": [
+           "t",
+           "e",
+           "c",
+           "h"
+          ]
+         }
+        ]
+       }
+      ],
+      "command": "HarperIgnoreLint",
+      "title": "Ignore Harper error."
+     },
+     {
+      "arguments": [
+       "teh",
+       "file:///nogrammerly/focused.txt"
+      ],
+      "command": "HarperAddToUserDict",
+      "title": "Add \"teh\" to the user dictionary."
+     },
+     {
+      "arguments": [
+       "teh",
+       "file:///nogrammerly/focused.txt"
+      ],
+      "command": "HarperAddToWSDict",
+      "title": "Add \"teh\" to the workspace dictionary."
+     },
+     {
+      "arguments": [
+       "teh",
+       "file:///nogrammerly/focused.txt"
+      ],
+      "command": "HarperAddToFileDict",
+      "title": "Add \"teh\" to the file dictionary."
+     }
+    ]
+   ]
+  },
+  "multibyte-midline": {
+   "text": "Résumé 👩‍👩‍👧‍👦 déjà vu 🇲🇽 — naïve façade.\nSecond line 😀😀 has a a repeat and recieve.\n\nThird 𝒳 paragraph: she go to school.",
+   "publishDiagnostics": {
+    "diagnostics": [
+     {
+      "code": "PronounVerbAgreement",
+      "message": "The form of the verb must agree in grammatical number with the pronoun.",
+      "range": {
+       "end": {
+        "character": 26,
+        "line": 3
+       },
+       "start": {
+        "character": 24,
+        "line": 3
+       }
+      },
+      "severity": 4,
+      "source": "Harper"
+     },
+     {
+      "code": "RepeatedWords",
+      "message": "Did you mean to repeat this word?",
+      "range": {
+       "end": {
+        "character": 24,
+        "line": 1
+       },
+       "start": {
+        "character": 21,
+        "line": 1
+       }
+      },
+      "severity": 4,
+      "source": "Harper"
+     },
+     {
+      "code": "SpellCheck",
+      "message": "Did you mean `dojo`?",
+      "range": {
+       "end": {
+        "character": 23,
+        "line": 0
+       },
+       "start": {
+        "character": 19,
+        "line": 0
+       }
+      },
+      "severity": 4,
+      "source": "Harper"
+     },
+     {
+      "code": "SpellCheck",
+      "message": "Did you mean to spell `vu` this way?",
+      "range": {
+       "end": {
+        "character": 26,
+        "line": 0
+       },
+       "start": {
+        "character": 24,
+        "line": 0
+       }
+      },
+      "severity": 4,
+      "source": "Harper"
+     },
+     {
+      "code": "SpellCheck",
+      "message": "Did you mean to spell `recieve` this way?",
+      "range": {
+       "end": {
+        "character": 43,
+        "line": 1
+       },
+       "start": {
+        "character": 36,
+        "line": 1
+       }
+      },
+      "severity": 4,
+      "source": "Harper"
+     }
+    ],
+    "uri": "file:///nogrammerly/focused.txt"
+   },
+   "codeActions": [
+    [
+     {
+      "edit": {
+       "changes": {
+        "file:///nogrammerly/focused.txt": [
+         {
+          "newText": "goes",
+          "range": {
+           "end": {
+            "character": 26,
+            "line": 3
+           },
+           "start": {
+            "character": 24,
+            "line": 3
+           }
+          }
+         }
+        ]
+       }
+      },
+      "kind": "quickfix",
+      "title": "Replace with: “goes”"
+     },
+     {
+      "arguments": [
+       "file:///nogrammerly/focused.txt",
+       {
+        "lint_kind": "Agreement",
+        "message": "The form of the verb must agree in grammatical number with the pronoun.",
+        "priority": 127,
+        "span": {
+         "end": 111,
+         "start": 109
+        },
+        "suggestions": [
+         {
+          "ReplaceWith": [
+           "g",
+           "o",
+           "e",
+           "s"
+          ]
+         }
+        ]
+       }
+      ],
+      "command": "HarperIgnoreLint",
+      "title": "Ignore Harper error."
+     }
+    ],
+    [
+     {
+      "edit": {
+       "changes": {
+        "file:///nogrammerly/focused.txt": [
+         {
+          "newText": "an",
+          "range": {
+           "end": {
+            "character": 22,
+            "line": 1
+           },
+           "start": {
+            "character": 21,
+            "line": 1
+           }
+          }
+         }
+        ]
+       }
+      },
+      "kind": "quickfix",
+      "title": "Replace with: “an”"
+     },
+     {
+      "arguments": [
+       "file:///nogrammerly/focused.txt",
+       {
+        "lint_kind": "Miscellaneous",
+        "message": "Incorrect indefinite article.",
+        "priority": 31,
+        "span": {
+         "end": 62,
+         "start": 61
+        },
+        "suggestions": [
+         {
+          "ReplaceWith": [
+           "a",
+           "n"
+          ]
+         }
+        ]
+       }
+      ],
+      "command": "HarperIgnoreLint",
+      "title": "Ignore Harper error."
+     },
+     {
+      "edit": {
+       "changes": {
+        "file:///nogrammerly/focused.txt": [
+         {
+          "newText": "a",
+          "range": {
+           "end": {
+            "character": 24,
+            "line": 1
+           },
+           "start": {
+            "character": 21,
+            "line": 1
+           }
+          }
+         }
+        ]
+       }
+      },
+      "kind": "quickfix",
+      "title": "Replace with: “a”"
+     },
+     {
+      "arguments": [
+       "file:///nogrammerly/focused.txt",
+       {
+        "lint_kind": "Repetition",
+        "message": "Did you mean to repeat this word?",
+        "priority": 128,
+        "span": {
+         "end": 64,
+         "start": 61
+        },
+        "suggestions": [
+         {
+          "ReplaceWith": [
+           "a"
+          ]
+         }
+        ]
+       }
+      ],
+      "command": "HarperIgnoreLint",
+      "title": "Ignore Harper error."
+     }
+    ],
+    [
+     {
+      "edit": {
+       "changes": {
+        "file:///nogrammerly/focused.txt": [
+         {
+          "newText": "dojo",
+          "range": {
+           "end": {
+            "character": 23,
+            "line": 0
+           },
+           "start": {
+            "character": 19,
+            "line": 0
+           }
+          }
+         }
+        ]
+       }
+      },
+      "kind": "quickfix",
+      "title": "Replace with: “dojo”"
+     },
+     {
+      "arguments": [
+       "file:///nogrammerly/focused.txt",
+       {
+        "lint_kind": "Spelling",
+        "message": "Did you mean `dojo`?",
+        "priority": 63,
+        "span": {
+         "end": 19,
+         "start": 15
+        },
+        "suggestions": [
+         {
+          "ReplaceWith": [
+           "d",
+           "o",
+           "j",
+           "o"
+          ]
+         }
+        ]
+       }
+      ],
+      "command": "HarperIgnoreLint",
+      "title": "Ignore Harper error."
+     },
+     {
+      "arguments": [
+       "déjà",
+       "file:///nogrammerly/focused.txt"
+      ],
+      "command": "HarperAddToUserDict",
+      "title": "Add \"déjà\" to the user dictionary."
+     },
+     {
+      "arguments": [
+       "déjà",
+       "file:///nogrammerly/focused.txt"
+      ],
+      "command": "HarperAddToWSDict",
+      "title": "Add \"déjà\" to the workspace dictionary."
+     },
+     {
+      "arguments": [
+       "déjà",
+       "file:///nogrammerly/focused.txt"
+      ],
+      "command": "HarperAddToFileDict",
+      "title": "Add \"déjà\" to the file dictionary."
+     }
+    ],
+    [
+     {
+      "edit": {
+       "changes": {
+        "file:///nogrammerly/focused.txt": [
+         {
+          "newText": "vb",
+          "range": {
+           "end": {
+            "character": 26,
+            "line": 0
+           },
+           "start": {
+            "character": 24,
+            "line": 0
+           }
+          }
+         }
+        ]
+       }
+      },
+      "kind": "quickfix",
+      "title": "Replace with: “vb”"
+     },
+     {
+      "edit": {
+       "changes": {
+        "file:///nogrammerly/focused.txt": [
+         {
+          "newText": "vi",
+          "range": {
+           "end": {
+            "character": 26,
+            "line": 0
+           },
+           "start": {
+            "character": 24,
+            "line": 0
+           }
+          }
+         }
+        ]
+       }
+      },
+      "kind": "quickfix",
+      "title": "Replace with: “vi”"
+     },
+     {
+      "edit": {
+       "changes": {
+        "file:///nogrammerly/focused.txt": [
+         {
+          "newText": "v",
+          "range": {
+           "end": {
+            "character": 26,
+            "line": 0
+           },
+           "start": {
+            "character": 24,
+            "line": 0
+           }
+          }
+         }
+        ]
+       }
+      },
+      "kind": "quickfix",
+      "title": "Replace with: “v”"
+     },
+     {
+      "arguments": [
+       "file:///nogrammerly/focused.txt",
+       {
+        "lint_kind": "Spelling",
+        "message": "Did you mean to spell `vu` this way?",
+        "priority": 63,
+        "span": {
+         "end": 22,
+         "start": 20
+        },
+        "suggestions": [
+         {
+          "ReplaceWith": [
+           "v",
+           "b"
+          ]
+         },
+         {
+          "ReplaceWith": [
+           "v",
+           "i"
+          ]
+         },
+         {
+          "ReplaceWith": [
+           "v"
+          ]
+         }
+        ]
+       }
+      ],
+      "command": "HarperIgnoreLint",
+      "title": "Ignore Harper error."
+     },
+     {
+      "arguments": [
+       "vu",
+       "file:///nogrammerly/focused.txt"
+      ],
+      "command": "HarperAddToUserDict",
+      "title": "Add \"vu\" to the user dictionary."
+     },
+     {
+      "arguments": [
+       "vu",
+       "file:///nogrammerly/focused.txt"
+      ],
+      "command": "HarperAddToWSDict",
+      "title": "Add \"vu\" to the workspace dictionary."
+     },
+     {
+      "arguments": [
+       "vu",
+       "file:///nogrammerly/focused.txt"
+      ],
+      "command": "HarperAddToFileDict",
+      "title": "Add \"vu\" to the file dictionary."
+     }
+    ],
+    [
+     {
+      "edit": {
+       "changes": {
+        "file:///nogrammerly/focused.txt": [
+         {
+          "newText": "receive",
+          "range": {
+           "end": {
+            "character": 43,
+            "line": 1
+           },
+           "start": {
+            "character": 36,
+            "line": 1
+           }
+          }
+         }
+        ]
+       }
+      },
+      "kind": "quickfix",
+      "title": "Replace with: “receive”"
+     },
+     {
+      "edit": {
+       "changes": {
+        "file:///nogrammerly/focused.txt": [
+         {
+          "newText": "relieve",
+          "range": {
+           "end": {
+            "character": 43,
+            "line": 1
+           },
+           "start": {
+            "character": 36,
+            "line": 1
+           }
+          }
+         }
+        ]
+       }
+      },
+      "kind": "quickfix",
+      "title": "Replace with: “relieve”"
+     },
+     {
+      "edit": {
+       "changes": {
+        "file:///nogrammerly/focused.txt": [
+         {
+          "newText": "recipe",
+          "range": {
+           "end": {
+            "character": 43,
+            "line": 1
+           },
+           "start": {
+            "character": 36,
+            "line": 1
+           }
+          }
+         }
+        ]
+       }
+      },
+      "kind": "quickfix",
+      "title": "Replace with: “recipe”"
+     },
+     {
+      "arguments": [
+       "file:///nogrammerly/focused.txt",
+       {
+        "lint_kind": "Spelling",
+        "message": "Did you mean to spell `recieve` this way?",
+        "priority": 63,
+        "span": {
+         "end": 83,
+         "start": 76
+        },
+        "suggestions": [
+         {
+          "ReplaceWith": [
+           "r",
+           "e",
+           "c",
+           "e",
+           "i",
+           "v",
+           "e"
+          ]
+         },
+         {
+          "ReplaceWith": [
+           "r",
+           "e",
+           "l",
+           "i",
+           "e",
+           "v",
+           "e"
+          ]
+         },
+         {
+          "ReplaceWith": [
+           "r",
+           "e",
+           "c",
+           "i",
+           "p",
+           "e"
+          ]
+         }
+        ]
+       }
+      ],
+      "command": "HarperIgnoreLint",
+      "title": "Ignore Harper error."
+     },
+     {
+      "arguments": [
+       "recieve",
+       "file:///nogrammerly/focused.txt"
+      ],
+      "command": "HarperAddToUserDict",
+      "title": "Add \"recieve\" to the user dictionary."
+     },
+     {
+      "arguments": [
+       "recieve",
+       "file:///nogrammerly/focused.txt"
+      ],
+      "command": "HarperAddToWSDict",
+      "title": "Add \"recieve\" to the workspace dictionary."
+     },
+     {
+      "arguments": [
+       "recieve",
+       "file:///nogrammerly/focused.txt"
+      ],
+      "command": "HarperAddToFileDict",
+      "title": "Add \"recieve\" to the file dictionary."
+     }
+    ]
+   ]
+  },
+  "crlf": {
+   "text": "First line is fine.\r\nThis has a a typo and recieve.\r\n\r\nShe go home.",
+   "publishDiagnostics": {
+    "diagnostics": [
+     {
+      "code": "PronounVerbAgreement",
+      "message": "The form of the verb must agree in grammatical number with the pronoun.",
+      "range": {
+       "end": {
+        "character": 6,
+        "line": 3
+       },
+       "start": {
+        "character": 4,
+        "line": 3
+       }
+      },
+      "severity": 4,
+      "source": "Harper"
+     },
+     {
+      "code": "RepeatedWords",
+      "message": "Did you mean to repeat this word?",
+      "range": {
+       "end": {
+        "character": 12,
+        "line": 1
+       },
+       "start": {
+        "character": 9,
+        "line": 1
+       }
+      },
+      "severity": 4,
+      "source": "Harper"
+     },
+     {
+      "code": "SpellCheck",
+      "message": "Did you mean to spell `recieve` this way?",
+      "range": {
+       "end": {
+        "character": 29,
+        "line": 1
+       },
+       "start": {
+        "character": 22,
+        "line": 1
+       }
+      },
+      "severity": 4,
+      "source": "Harper"
+     }
+    ],
+    "uri": "file:///nogrammerly/focused.txt"
+   },
+   "codeActions": [
+    [
+     {
+      "edit": {
+       "changes": {
+        "file:///nogrammerly/focused.txt": [
+         {
+          "newText": "goes",
+          "range": {
+           "end": {
+            "character": 6,
+            "line": 3
+           },
+           "start": {
+            "character": 4,
+            "line": 3
+           }
+          }
+         }
+        ]
+       }
+      },
+      "kind": "quickfix",
+      "title": "Replace with: “goes”"
+     },
+     {
+      "arguments": [
+       "file:///nogrammerly/focused.txt",
+       {
+        "lint_kind": "Agreement",
+        "message": "The form of the verb must agree in grammatical number with the pronoun.",
+        "priority": 127,
+        "span": {
+         "end": 61,
+         "start": 59
+        },
+        "suggestions": [
+         {
+          "ReplaceWith": [
+           "g",
+           "o",
+           "e",
+           "s"
+          ]
+         }
+        ]
+       }
+      ],
+      "command": "HarperIgnoreLint",
+      "title": "Ignore Harper error."
+     }
+    ],
+    [
+     {
+      "edit": {
+       "changes": {
+        "file:///nogrammerly/focused.txt": [
+         {
+          "newText": "an",
+          "range": {
+           "end": {
+            "character": 10,
+            "line": 1
+           },
+           "start": {
+            "character": 9,
+            "line": 1
+           }
+          }
+         }
+        ]
+       }
+      },
+      "kind": "quickfix",
+      "title": "Replace with: “an”"
+     },
+     {
+      "arguments": [
+       "file:///nogrammerly/focused.txt",
+       {
+        "lint_kind": "Miscellaneous",
+        "message": "Incorrect indefinite article.",
+        "priority": 31,
+        "span": {
+         "end": 31,
+         "start": 30
+        },
+        "suggestions": [
+         {
+          "ReplaceWith": [
+           "a",
+           "n"
+          ]
+         }
+        ]
+       }
+      ],
+      "command": "HarperIgnoreLint",
+      "title": "Ignore Harper error."
+     },
+     {
+      "edit": {
+       "changes": {
+        "file:///nogrammerly/focused.txt": [
+         {
+          "newText": "a",
+          "range": {
+           "end": {
+            "character": 12,
+            "line": 1
+           },
+           "start": {
+            "character": 9,
+            "line": 1
+           }
+          }
+         }
+        ]
+       }
+      },
+      "kind": "quickfix",
+      "title": "Replace with: “a”"
+     },
+     {
+      "arguments": [
+       "file:///nogrammerly/focused.txt",
+       {
+        "lint_kind": "Repetition",
+        "message": "Did you mean to repeat this word?",
+        "priority": 128,
+        "span": {
+         "end": 33,
+         "start": 30
+        },
+        "suggestions": [
+         {
+          "ReplaceWith": [
+           "a"
+          ]
+         }
+        ]
+       }
+      ],
+      "command": "HarperIgnoreLint",
+      "title": "Ignore Harper error."
+     }
+    ],
+    [
+     {
+      "edit": {
+       "changes": {
+        "file:///nogrammerly/focused.txt": [
+         {
+          "newText": "receive",
+          "range": {
+           "end": {
+            "character": 29,
+            "line": 1
+           },
+           "start": {
+            "character": 22,
+            "line": 1
+           }
+          }
+         }
+        ]
+       }
+      },
+      "kind": "quickfix",
+      "title": "Replace with: “receive”"
+     },
+     {
+      "edit": {
+       "changes": {
+        "file:///nogrammerly/focused.txt": [
+         {
+          "newText": "relieve",
+          "range": {
+           "end": {
+            "character": 29,
+            "line": 1
+           },
+           "start": {
+            "character": 22,
+            "line": 1
+           }
+          }
+         }
+        ]
+       }
+      },
+      "kind": "quickfix",
+      "title": "Replace with: “relieve”"
+     },
+     {
+      "edit": {
+       "changes": {
+        "file:///nogrammerly/focused.txt": [
+         {
+          "newText": "recipe",
+          "range": {
+           "end": {
+            "character": 29,
+            "line": 1
+           },
+           "start": {
+            "character": 22,
+            "line": 1
+           }
+          }
+         }
+        ]
+       }
+      },
+      "kind": "quickfix",
+      "title": "Replace with: “recipe”"
+     },
+     {
+      "arguments": [
+       "file:///nogrammerly/focused.txt",
+       {
+        "lint_kind": "Spelling",
+        "message": "Did you mean to spell `recieve` this way?",
+        "priority": 63,
+        "span": {
+         "end": 50,
+         "start": 43
+        },
+        "suggestions": [
+         {
+          "ReplaceWith": [
+           "r",
+           "e",
+           "c",
+           "e",
+           "i",
+           "v",
+           "e"
+          ]
+         },
+         {
+          "ReplaceWith": [
+           "r",
+           "e",
+           "l",
+           "i",
+           "e",
+           "v",
+           "e"
+          ]
+         },
+         {
+          "ReplaceWith": [
+           "r",
+           "e",
+           "c",
+           "i",
+           "p",
+           "e"
+          ]
+         }
+        ]
+       }
+      ],
+      "command": "HarperIgnoreLint",
+      "title": "Ignore Harper error."
+     },
+     {
+      "arguments": [
+       "recieve",
+       "file:///nogrammerly/focused.txt"
+      ],
+      "command": "HarperAddToUserDict",
+      "title": "Add \"recieve\" to the user dictionary."
+     },
+     {
+      "arguments": [
+       "recieve",
+       "file:///nogrammerly/focused.txt"
+      ],
+      "command": "HarperAddToWSDict",
+      "title": "Add \"recieve\" to the workspace dictionary."
+     },
+     {
+      "arguments": [
+       "recieve",
+       "file:///nogrammerly/focused.txt"
+      ],
+      "command": "HarperAddToFileDict",
+      "title": "Add \"recieve\" to the file dictionary."
+     }
+    ]
+   ]
+  },
+  "clean": {
+   "text": "The meeting starts at noon.",
+   "publishDiagnostics": {
+    "diagnostics": [],
+    "uri": "file:///nogrammerly/focused.txt"
+   },
+   "codeActions": []
+  }
+ }
+}

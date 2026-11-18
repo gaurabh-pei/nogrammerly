@@ -1,11 +1,13 @@
 import AppKit
 
-/// Fast, synchronous checks: the macOS spelling/grammar checker plus local style rules.
+/// Fast, synchronous checks: Harper (bundled harper-ls) or the macOS spelling/grammar checker, plus local style rules.
 /// Deeper grammar, clarity and tone checks come asynchronously from `AIWriter`.
 enum WritingEngine {
     /// Fields longer than this are skipped to keep system-wide polling cheap.
     static let maxLength = 20_000
     static let spellTag = NSSpellChecker.uniqueSpellDocumentTag()
+    private static let appleSecondary = ProcessInfo.processInfo.environment["NOGRAMMERLY_APPLE_SECONDARY"] == "1"
+        || UserDefaults.standard.bool(forKey: "NogrammerlyAppleSecondary")
 
     private static let styleRules: [(phrase: String, replacement: String?, title: String, kind: SuggestionKind)] = [
         ("utilize", "use", "Prefer simpler wording", .clarity),
@@ -22,6 +24,11 @@ enum WritingEngine {
     ]
 
     static func analyze(_ text: String) -> WritingAnalysis {
+        analyze(text, harper: HarperEngine.shared)
+    }
+
+    /// `harper` nil means the Apple checker (NOGRAMMERLY_ENGINE=apple, or harper-ls not bundled).
+    static func analyze(_ text: String, harper: HarperEngine?) -> WritingAnalysis {
         let nsText = text as NSString
         var suggestions: [WritingSuggestion] = []
         for rule in styleRules {
@@ -49,11 +56,60 @@ enum WritingEngine {
 
         let words = text.split { $0.isWhitespace }.count
         let avg = words / max(sentenceCount, 1)
-        // Specific phrase rules win over the dictionary where they overlap (e.g. "utilize" → "use", not "utilise").
-        let unique = merge(suggestions, checkSpellingAndGrammar(text))
+        let unique: [WritingSuggestion]
+        if let harper, let found = harper.lint(text) {
+            // Harper is primary; the local phrase rules fill in what it does not cover ("utilize", "I think").
+            // NOGRAMMERLY_APPLE_SECONDARY=1 also merges the Apple checker behind both.
+            let secondary = appleSecondary ? merge(suggestions, checkSpellingAndGrammar(text)) : suggestions
+            unique = merge(preferAppleCorrections(found, in: text), secondary)
+        } else {
+            // Specific phrase rules win over the dictionary where they overlap (e.g. "utilize" → "use", not "utilise").
+            unique = merge(suggestions, checkSpellingAndGrammar(text))
+        }
         let readability = max(35, min(100, 100 - max(avg - 12, 0) * 3 - unique.count * 2))
         let tone = text.contains("!") ? "Enthusiastic" : text.lowercased().contains("please") ? "Polite" : "Neutral"
         return WritingAnalysis(suggestions: unique, words: words, readability: readability, tone: tone)
+    }
+
+    /// Harper decides well what is misspelled, but Apple's checker usually picks the better word ("acess" → "access",
+    /// not "ace's"; "wenesday" → "Wednesday", not "weekday"). For a Harper spelling finding that Apple also considers
+    /// misspelled, use Apple's correction and keep Harper's as an alternative. Words Apple accepts keep Harper's fix.
+    static func preferAppleCorrections(_ suggestions: [WritingSuggestion], in text: String) -> [WritingSuggestion] {
+        let nsText = text as NSString
+        return suggestions.map { suggestion in
+            guard suggestion.isSpelling, suggestion.title.hasSuffix("(Harper)"), NSMaxRange(suggestion.range) <= nsText.length,
+                  let apple = appleCorrection(for: suggestion.original),
+                  apple != suggestion.original, apple != suggestion.replacement else { return suggestion }
+            let message = suggestion.explanation.components(separatedBy: " Replace with ").first ?? suggestion.explanation
+            return WritingSuggestion(kind: suggestion.kind, title: suggestion.title,
+                                     explanation: HarperMapper.explanation(message, replacement: apple, alternatives: [suggestion.replacement].compactMap { $0 }),
+                                     original: suggestion.original, replacement: apple, range: suggestion.range, isSpelling: true)
+        }
+    }
+
+    private static let correctionLock = NSLock()
+    nonisolated(unsafe) private static var corrections: [String: String?] = [:]
+
+    /// Apple's correction for a word it considers misspelled, or nil (also when it accepts the word). Cached per
+    /// word and language, because every keystroke re-checks every misspelling in the field while Harper's own
+    /// results come from its chunk cache; without this a 20,000-character field pays ~80 ms per keystroke.
+    static func appleCorrection(for word: String) -> String? {
+        let checker = NSSpellChecker.shared
+        let key = checker.language() + "|" + word
+        correctionLock.lock()
+        if let cached = corrections[key] { correctionLock.unlock(); return cached }
+        correctionLock.unlock()
+        let range = NSRange(location: 0, length: (word as NSString).length)
+        var answer: String?
+        if checker.checkSpelling(of: word, startingAt: 0).location != NSNotFound {
+            answer = checker.correction(forWordRange: range, in: word, language: checker.language(), inSpellDocumentWithTag: spellTag)
+                ?? checker.guesses(forWordRange: range, in: word, language: nil, inSpellDocumentWithTag: spellTag)?.first
+        }
+        correctionLock.lock()
+        if corrections.count > 4_000 { corrections.removeAll() }
+        corrections[key] = .some(answer)
+        correctionLock.unlock()
+        return answer
     }
 
     /// Combines suggestion lists, dropping any whose range overlaps one already kept (earlier lists win).

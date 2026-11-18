@@ -15,3 +15,6 @@ Assets/Nogrammerly.iconset/
 # .NET build output (windows/)
 windows/**/bin/
 windows/**/obj/
+
+# harper-ls binary fetched by script/fetch_harper_ls.sh (pinned in Vendor/harper-ls/harper-ls.pin)
+Vendor/harper-ls/bin/
