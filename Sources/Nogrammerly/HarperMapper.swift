@@ -86,17 +86,19 @@ enum HarperMapper {
                 return (args.dropFirst().first as? JSON)?["message"] as? String
             }.first
         }
-        func editsHitTarget(_ group: [JSON]) -> Bool {
+        func editsHitTarget(_ group: [JSON], exactly: Bool) -> Bool {
             guard let target else { return false }
             return Fixes(actions: group).edits.contains { edit in
                 guard let editRange = range(of: edit.range, lineStarts: starts, length: text.length) else { return false }
-                return editRange == target || NSIntersectionRange(editRange, target).length > 0
+                return editRange == target || (!exactly && NSIntersectionRange(editRange, target).length > 0)
             }
         }
         let byMessage = groups.filter { ignoreMessage($0) == message }
         if byMessage.count == 1 { return byMessage[0] }
         let candidates = byMessage.isEmpty ? groups : byMessage
-        return candidates.first(where: editsHitTarget) ?? byMessage.first ?? []
+        // Overlapping lints can share a message: an edit on exactly this range beats one that merely overlaps it.
+        return candidates.first { editsHitTarget($0, exactly: true) } ?? candidates.first { editsHitTarget($0, exactly: false) }
+            ?? byMessage.first ?? []
     }
 
     /// What the code actions for one diagnostic say: replacement edits and Harper's lint kind (carried in the
@@ -131,24 +133,32 @@ enum HarperMapper {
             let rule = diagnostic["code"] as? String ?? (diagnostic["code"] as? Int).map(String.init) ?? "Harper"
             let message = diagnostic["message"] as? String ?? "Possible issue."
             let fixes = Fixes(actions: (index < actions.count ? actions[index] : nil).map { Self.actions($0, for: diagnostic, in: nsText, lineStarts: starts) })
-            // Harper's quick fixes may cover a different span than the diagnostic (e.g. "a a" → "a"); apply what it edits.
+            // Harper's quick fixes may cover a different span than the diagnostic (e.g. "a a" → "a"); apply what it
+            // edits. A pure insertion (empty range) is widened to the diagnostic so the replacement keeps the word.
             let edits = fixes.edits.compactMap { edit -> (range: NSRange, text: String)? in
                 range(of: edit.range, lineStarts: starts, length: nsText.length).map { ($0, edit.newText) }
             }
-            let primary = edits.first
-            let suggestionRange = primary?.range.length ?? 0 > 0 ? primary!.range : diagnosticRange
+            let suggestionRange = edits.first.map { $0.range.length > 0 ? $0.range : NSUnionRange(diagnosticRange, $0.range) } ?? diagnosticRange
+            let replacements = edits.compactMap { applied($0, within: suggestionRange, of: nsText) }
             let original = nsText.substring(with: suggestionRange)
-            let alternatives = edits.dropFirst().filter { $0.range == suggestionRange }.map(\.text)
             mapped.append(WritingSuggestion(
                 kind: kind(rule: rule, lintKind: fixes.lintKind),
                 title: title(for: rule),
-                explanation: explanation(message, replacement: primary?.text, alternatives: alternatives),
+                explanation: explanation(message, replacement: replacements.first, alternatives: Array(replacements.dropFirst())),
                 original: original,
-                replacement: primary?.text,
+                replacement: replacements.first,
                 range: suggestionRange,
                 isSpelling: rule == "SpellCheck"))
         }
         return mapped
+    }
+
+    /// The text `range` would read after applying `edit`, or nil when the edit reaches outside `range`.
+    static func applied(_ edit: (range: NSRange, text: String), within range: NSRange, of text: NSString) -> String? {
+        guard edit.range.location >= range.location, NSMaxRange(edit.range) <= NSMaxRange(range) else { return nil }
+        let before = text.substring(with: NSRange(location: range.location, length: edit.range.location - range.location))
+        let after = text.substring(with: NSRange(location: NSMaxRange(edit.range), length: NSMaxRange(range) - NSMaxRange(edit.range)))
+        return before + edit.text + after
     }
 
     /// Rules that judge how a message lands rather than whether it is correct.

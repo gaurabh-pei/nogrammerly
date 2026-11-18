@@ -57,13 +57,11 @@ enum WritingEngine {
         let avg = words / max(sentenceCount, 1)
         let unique: [WritingSuggestion]
         if let harper, let found = harper.lint(text) {
-            HarperEngine.status = HarperEngine.selection.reason
             // Harper is primary; the local phrase rules fill in what it does not cover ("utilize", "I think").
             // NOGRAMMERLY_APPLE_SECONDARY=1 also merges the Apple checker behind both.
             let secondary = appleSecondary ? merge(suggestions, checkSpellingAndGrammar(text)) : suggestions
             unique = merge(found, secondary)
         } else {
-            if harper != nil, !text.isEmpty { HarperEngine.status = "Checks: Apple spelling and grammar for now. Harper did not answer in time." }
             // Specific phrase rules win over the dictionary where they overlap (e.g. "utilize" → "use", not "utilise").
             unique = merge(suggestions, checkSpellingAndGrammar(text))
         }

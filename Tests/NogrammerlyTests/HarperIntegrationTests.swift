@@ -116,6 +116,32 @@ struct HarperIntegrationTests {
         #expect(next.contains { $0.original == "teh" })
     }
 
+    /// While the sidecar is starting, lint() answers at once (Apple fallback) instead of holding up the main thread.
+    @Test func lintDoesNotWaitForStartup() throws {
+        let engine = HarperEngine(executable: try #require(HarperTestSupport.executable),
+                                  support: FileManager.default.temporaryDirectory.appendingPathComponent("nogrammerly-test-\(UUID().uuidString)"))
+        defer { engine.stop() }
+        DispatchQueue.global().async { engine.start(timeout: HarperTestSupport.patience) }
+        #expect(HarperTestSupport.waitUntil(2) { engine.processIdentifier != nil })
+        let start = Date()
+        let result = engine.lint("We recieve it.")
+        #expect(result == nil || engine.isRunning) // nil while starting; a real answer only if start already finished
+        #expect(Date().timeIntervalSince(start) < 0.2)
+        #expect(HarperTestSupport.waitUntil(HarperTestSupport.patience) { engine.isRunning })
+        #expect(engine.lint("We recieve it.", deadline: HarperTestSupport.patient())?.contains { $0.original == "recieve" } == true)
+    }
+
+    /// Add to dictionary right after a missed deadline: the command's publish must not answer the next lint.
+    @Test func dictionaryAfterMissedDeadline() throws {
+        let engine = try HarperTestSupport.makeEngine(); defer { engine.stop() }
+        #expect(engine.lint("Please Zorbulate it.", deadline: Date()) == nil)
+        engine.addToDictionary("Zorbulate")
+        usleep(200_000)
+        let found = try #require(engine.lint("Look at teh numbers.", deadline: HarperTestSupport.patient()))
+        #expect(found.map(\.original) == ["teh"])
+        #expect(try #require(engine.lint("Please Zorbulate it.", deadline: HarperTestSupport.patient())).isEmpty)
+    }
+
     /// A lint that misses its deadline must not poison later ones: the late answer is dropped by URI.
     @Test func recoversAfterMissedDeadline() throws {
         let engine = try HarperTestSupport.makeEngine(); defer { engine.stop() }
