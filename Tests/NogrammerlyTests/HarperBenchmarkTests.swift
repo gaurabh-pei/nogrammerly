@@ -47,20 +47,30 @@ struct HarperBenchmarkTests {
         let message = Self.corpus["errors"]![0]
         var first: [WritingSuggestion]?
         let firstLint = Self.time { first = engine.lint(message) }
+        #expect(first != nil)
         Self.report("cold_start", ["spawn_init_warm_ms": Self.ms(cold), "first_field_lint_ms": Self.ms(firstLint), "first_field_findings": first?.count ?? -1])
 
-        // Warm: one keystroke at a time in a ~300-char field (every call is a cache miss).
-        var text = Self.corpus["errors"]![3]
-        var keystrokes: [TimeInterval] = []
-        for i in 0..<60 { text += i % 5 == 4 ? " " : "x"; keystrokes.append(Self.time { _ = engine.lint(text) }) }
-        let unchanged = (0..<60).map { _ in Self.time { _ = engine.lint(text) } }
-        // Full analyze() on the main thread path (Harper + local rules + merge), warm.
-        var analyzeTimes: [TimeInterval] = []
-        for i in 0..<60 { text += i % 5 == 4 ? " " : "y"; analyzeTimes.append(Self.time { _ = WritingEngine.analyze(text, harper: engine) }) }
-        var appleTimes: [TimeInterval] = []
-        for i in 0..<60 { text += i % 5 == 4 ? " " : "z"; appleTimes.append(Self.time { _ = WritingEngine.analyze(text, harper: nil) }) }
+        // Warm keystrokes in a ~400-character field. Each phase types into its own copy of the same base text with a
+        // different letter, so every Harper call is a cache miss, and Harper and Apple analyze() see identical snapshots.
+        let base = Self.corpus["errors"]![3]
+        func snapshots(_ letter: String) -> [String] {
+            var text = base
+            return (0..<60).map { i in text += i % 5 == 4 ? " " : letter; return text }
+        }
+        var failures = 0
+        let keystrokes = snapshots("x").map { text in Self.time { if engine.lint(text) == nil { failures += 1 } } }
+        let unchanged = (0..<60).map { _ in Self.time { if engine.lint(base) == nil { failures += 1 } } }
+        // Full analyze() (checker + local rules + merge), the main-thread path. A Harper pass that fell back to
+        // Apple is counted as a failure, not timed as Harper.
+        let analyzeSnapshots = snapshots("y")
+        let analyzeTimes = analyzeSnapshots.map { text in
+            Self.time { _ = WritingEngine.analyze(text, harper: engine); if !engine.lastLintSucceeded { failures += 1 } }
+        }
+        let appleTimes = analyzeSnapshots.map { text in Self.time { _ = WritingEngine.analyze(text, harper: nil) } }
+        #expect(failures == 0)
         Self.report("warm_short_field", [
-            "chars": (text as NSString).length,
+            "chars_from": (base as NSString).length + 1, "chars_to": (analyzeSnapshots.last! as NSString).length,
+            "harper_failures": failures,
             "keystroke_lint_p50_ms": Self.percentile(keystrokes, 0.5), "keystroke_lint_p95_ms": Self.percentile(keystrokes, 0.95),
             "unchanged_p50_ms": Self.percentile(unchanged, 0.5),
             "analyze_harper_p50_ms": Self.percentile(analyzeTimes, 0.5), "analyze_harper_p95_ms": Self.percentile(analyzeTimes, 0.95),
@@ -77,9 +87,12 @@ struct HarperBenchmarkTests {
         let longCold = Self.time { longFound = fresh.lint(long, deadline: Date(timeIntervalSinceNow: 30)) }
         let middle = (long as NSString).length / 2
         let edited = (long as NSString).replacingCharacters(in: NSRange(location: middle, length: 0), with: "q")
-        let longEdit = Self.time { _ = fresh.lint(edited) }
+        var longEditFound: [WritingSuggestion]?
+        let longEdit = Self.time { longEditFound = fresh.lint(edited) }
         let longAnalyze = Self.time { _ = WritingEngine.analyze(edited + " ", harper: fresh) }
-        let longApple = Self.time { _ = WritingEngine.analyze(edited, harper: nil) }
+        let longAnalyzeOK = fresh.lastLintSucceeded
+        let longApple = Self.time { _ = WritingEngine.analyze(edited + " ", harper: nil) }
+        #expect(longFound != nil && longEditFound != nil && longAnalyzeOK)
         Self.report("field_20k", [
             "chars": (long as NSString).length, "chunks": HarperEngine.chunks(of: long as NSString).count, "findings": longFound?.count ?? -1,
             "all_chunks_new_ms": Self.ms(longCold), "one_keystroke_ms": Self.ms(longEdit),

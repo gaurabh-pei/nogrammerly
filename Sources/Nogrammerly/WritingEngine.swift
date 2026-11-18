@@ -7,6 +7,7 @@ enum WritingEngine {
     static let maxLength = 20_000
     static let spellTag = NSSpellChecker.uniqueSpellDocumentTag()
     private static let appleSecondary = ProcessInfo.processInfo.environment["NOGRAMMERLY_APPLE_SECONDARY"] == "1"
+        || UserDefaults.standard.bool(forKey: "NogrammerlyAppleSecondary")
 
     private static let styleRules: [(phrase: String, replacement: String?, title: String, kind: SuggestionKind)] = [
         ("utilize", "use", "Prefer simpler wording", .clarity),

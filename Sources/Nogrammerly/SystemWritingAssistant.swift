@@ -64,6 +64,9 @@ final class SystemWritingAssistant: NSObject, NSMenuDelegate {
         report("Everywhere mode is on. Right-click an underlined word in any app for suggestions.")
     }
 
+    /// Re-checks the focused field on the next poll even if its text has not changed (e.g. once Harper is ready).
+    func refreshAnalysis() { text = "" }
+
     func stop() {
         pollTimer?.invalidate(); pollTimer = nil
         permissionTimer?.invalidate(); permissionTimer = nil

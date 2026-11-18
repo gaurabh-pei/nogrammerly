@@ -157,7 +157,15 @@ NOGRAMMERLY_BUNDLE_HARPER=1 ./script/build_and_run.sh   # downloads and verifies
 ./script/fetch_harper_ls.sh                             # fetch only (used by the tests and CI)
 ```
 
-At run time, `NOGRAMMERLY_ENGINE=apple` switches back to Apple's checker, `HARPER_LS_PATH=/path/to/harper-ls` points at another build, and `NOGRAMMERLY_APPLE_SECONDARY=1` also merges Apple's results behind Harper's. The sidebar always says which checker is active. Without the build flag, nothing changes.
+Run-time switches (quit and reopen the app after changing them):
+
+```bash
+defaults write com.nogrammerly.app NogrammerlyEngine apple          # back to Apple's checker
+defaults write com.nogrammerly.app NogrammerlyAppleSecondary -bool YES  # also merge Apple's results behind Harper's
+defaults delete com.nogrammerly.app NogrammerlyEngine                # undo
+```
+
+When you start the binary directly (`dist/Nogrammerly.app/Contents/MacOS/Nogrammerly`), the environment variables `NOGRAMMERLY_ENGINE=apple`, `NOGRAMMERLY_APPLE_SECONDARY=1` and `HARPER_LS_PATH=/path/to/harper-ls` work too. `open` and the Dock don't pass the shell environment to apps. The sidebar always says which checker is active. Without the build flag, nothing changes.
 
 The icon is generated from `Assets/Nogrammerly-icon.png` (a 1024×1024 image with square edges that fills the whole canvas). `script/create_icon.sh` masks it to the macOS rounded-square shape and builds the `.icns`.
 

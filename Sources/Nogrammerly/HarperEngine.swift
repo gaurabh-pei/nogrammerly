@@ -6,19 +6,22 @@ import Foundation
 /// Why LSP and not a linked library: Harper exposes no C ABI, and its Rust API changes between releases;
 /// the language-server protocol is the interface it keeps stable.
 ///
-/// Threading: `lint(_:deadline:)` is synchronous and may be called from the main actor. Replies are read on a
-/// GCD queue (`readabilityHandler`) and hand results back through semaphores, so a blocked caller never
-/// starves the reader. Calls are serialized because the server holds one document.
+/// Threading: `lint(_:deadline:)` is synchronous and may be called from the main actor. Writes go out on a serial
+/// queue and replies are read on another (`readabilityHandler`), handing results back through semaphores, so a
+/// caller only ever waits on a semaphore with its deadline, never on the pipe. Lint calls are serialized.
 final class HarperEngine: @unchecked Sendable {
     // MARK: Backend selection
 
     enum Backend: String { case harper, apple }
 
-    /// `NOGRAMMERLY_ENGINE=harper|apple`; default harper when a harper-ls executable resolves, else apple.
+    /// `NOGRAMMERLY_ENGINE=harper|apple` in the environment, or `defaults write com.nogrammerly.app NogrammerlyEngine
+    /// apple` (the environment does not reach an app opened through LaunchServices, e.g. `open` or the Dock).
+    /// Default: harper when a harper-ls executable resolves, else apple.
     static let selection: (backend: Backend, executable: URL?, reason: String) = {
         let env = ProcessInfo.processInfo.environment
-        let requested = env["NOGRAMMERLY_ENGINE"].flatMap { Backend(rawValue: $0.lowercased()) }
-        if requested == .apple { return (.apple, nil, "Checks: Apple spelling and grammar (NOGRAMMERLY_ENGINE=apple)") }
+        let requested = (env["NOGRAMMERLY_ENGINE"] ?? UserDefaults.standard.string(forKey: "NogrammerlyEngine"))
+            .flatMap { Backend(rawValue: $0.lowercased()) }
+        if requested == .apple { return (.apple, nil, "Checks: Apple spelling and grammar (engine set to apple)") }
         guard let executable = resolveExecutable(environment: env) else {
             return (.apple, nil, "Checks: Apple spelling and grammar. Harper (harper-ls) was not found, so the built-in checker is used.")
         }
@@ -43,6 +46,8 @@ final class HarperEngine: @unchecked Sendable {
     // MARK: Status
 
     static let statusDidChange = Notification.Name("HarperEngineStatusDidChange")
+    /// Posted when the sidecar becomes ready, so fields analysed with the Apple fallback meanwhile can be re-checked.
+    static let didBecomeReady = Notification.Name("HarperEngineDidBecomeReady")
     private static let statusLock = NSLock()
     nonisolated(unsafe) private static var _status = selection.reason
     /// One visible line describing which checker is running. The app shows it; fallbacks are never silent.
@@ -56,11 +61,13 @@ final class HarperEngine: @unchecked Sendable {
 
     // MARK: Configuration
 
-    /// One stable document URI. `publishDiagnostics` carries no version, so the next publish for the current URI after a
-    /// change is taken as its answer. Anything that could leave an extra publish in flight (a missed deadline, a
-    /// workspace command) closes the URI and moves to a fresh one (focused-1.txt, focused-2.txt…); publishes for any
-    /// other URI are dropped, so one can never be read as the answer for different text.
-    static let documentURI = "file:///nogrammerly/focused.txt"
+    /// `publishDiagnostics` carries no version, so each chunk is sent as its own document (focused-1.txt,
+    /// focused-2.txt…, the previous one closed first, so the server holds one at a time) and only a publish for that
+    /// exact URI answers it. A late or duplicate publish names an older URI and is dropped; it can never be read as the
+    /// answer for different text.
+    static func documentURI(_ generation: Int) -> String { "file:///nogrammerly/focused-\(generation).txt" }
+    /// Frames larger than this are treated as corrupt (a 20,000-character field produces well under 1 MB).
+    static let maxFrameBytes = 16 << 20
     /// Plain text, not Markdown: in Markdown mode harper-ls skips `code` spans, but it also title-cases lines that
     /// start with "#", sentence-cases ">" lines and stops checking inside headings, which misfires on chat and mail.
     static let languageID = "plaintext"
@@ -157,18 +164,21 @@ final class HarperEngine: @unchecked Sendable {
     private var stopping = false
     private var restartsLeft = 1
     private var uriGeneration = 0
-    private var currentURI: String { uriGeneration == 0 ? Self.documentURI : "file:///nogrammerly/focused-\(uriGeneration).txt" }
+    private var currentURI: String { Self.documentURI(uriGeneration) }
     private var ready = false
     private var starting = false
+    /// Serial: keeps frames in order and keeps every caller off the pipe (a full pipe blocks the writer, not them).
+    private let writeQueue = DispatchQueue(label: "nogrammerly.harper.write")
 
-    // Serializes lint calls and owns the fields below (one document on the server).
+    // Serializes lint calls and owns the fields below.
     private let lintLock = NSLock()
-    private var documentOpen = false
-    private var version = 0
+    private var openURI: String?
     private var cache: [String: [WritingSuggestion]] = [:]
     private var cacheOrder: [String] = []
 
     var isRunning: Bool { state.lock(); defer { state.unlock() }; return process?.isRunning == true && ready }
+    /// Whether the most recent lint() call answered (false when it fell back). For tests and the benchmark.
+    private(set) var lastLintSucceeded = false
     var processIdentifier: Int32? { state.lock(); defer { state.unlock() }; return process?.processIdentifier }
 
     // MARK: Lifecycle
@@ -176,6 +186,9 @@ final class HarperEngine: @unchecked Sendable {
     /// Spawns harper-ls, performs the LSP handshake and warms the dictionary. Safe to call repeatedly.
     @discardableResult
     func start(timeout: TimeInterval = 5) -> Bool {
+        // Flag the start before taking the lock, so a lint() that has not got the lock yet backs off immediately.
+        state.lock(); starting = true; state.unlock()
+        defer { state.lock(); starting = false; state.unlock() }
         guard lintLock.lock(before: Date(timeIntervalSinceNow: timeout)) else { return false }
         defer { lintLock.unlock() }
         return startLocked(deadline: Date(timeIntervalSinceNow: timeout))
@@ -183,8 +196,6 @@ final class HarperEngine: @unchecked Sendable {
 
     private func startLocked(deadline: Date) -> Bool {
         if isRunning { return true }
-        state.lock(); starting = true; state.unlock()
-        defer { state.lock(); starting = false; state.unlock() }
         Self.status = "Checks: Harper is starting; Apple spelling and grammar until it is ready."
         signal(SIGPIPE, SIG_IGN) // a write to a dead sidecar must fail with EPIPE, not kill the app
         let process = Process()
@@ -209,7 +220,7 @@ final class HarperEngine: @unchecked Sendable {
             Self.status = "Checks: Apple spelling and grammar. Harper could not start (\(error.localizedDescription))."
             return false
         }
-        documentOpen = false
+        openURI = nil
         cache.removeAll(); cacheOrder.removeAll()
         let initialize: [String: Any] = [
             "processId": Int(getpid()),
@@ -227,8 +238,10 @@ final class HarperEngine: @unchecked Sendable {
         // The first document loads Harper's dictionary (~0.2 s); do it now instead of on the first keystroke.
         _ = lintChunk("Nogrammerly is ready.", deadline: deadline)
         // Ready only now, and `starting` cleared first, so a caller that sees isRunning is never turned away.
-        state.lock(); starting = false; ready = self.process?.isRunning == true; state.unlock()
+        state.lock(); starting = false; ready = self.process?.isRunning == true; let isReady = ready; state.unlock()
+        guard isReady else { return false }
         Self.status = Self.selection.reason
+        NotificationCenter.default.post(name: Self.didBecomeReady, object: self)
         return true
     }
 
@@ -281,8 +294,17 @@ final class HarperEngine: @unchecked Sendable {
     /// missed `deadline` (the caller then falls back to the Apple checker for this pass). Never spawns the
     /// sidecar itself and never waits for a start in progress, so a main-thread caller is not held up by one.
     func lint(_ text: String, deadline: Date = Date(timeIntervalSinceNow: 1)) -> [WritingSuggestion]? {
-        state.lock(); let busyStarting = starting; state.unlock()
-        guard !busyStarting, lintLock.lock(before: deadline) else { return nil }
+        lastLintSucceeded = false
+        // Take the lock without ever waiting behind a start: poll it, and give up as soon as a start is flagged.
+        while !lintLock.try() {
+            state.lock(); let busyStarting = starting; state.unlock()
+            if busyStarting { return nil }
+            if Date() >= deadline {
+                Self.status = "Checks: Apple spelling and grammar for now. Harper was busy."
+                return nil
+            }
+            usleep(1_000)
+        }
         defer { lintLock.unlock() }
         guard isRunning else { return nil }
         let nsText = text as NSString
@@ -295,30 +317,28 @@ final class HarperEngine: @unchecked Sendable {
                 found = cached
             } else {
                 guard let fresh = lintChunk(chunk, deadline: deadline) else { return nil }
-                remember(fresh, for: chunk)
-                found = fresh
+                // A chunk whose fixes missed the deadline is shown as is but not cached, so the next pass retries it.
+                if fresh.complete { remember(fresh.suggestions, for: chunk) }
+                found = fresh.suggestions
             }
             results += found.map { $0.shifted(by: chunkRange.location) }
         }
-        Self.status = Self.selection.reason
+        lastLintSucceeded = true
+        if isRunning { Self.status = Self.selection.reason } // never paper over a stop reported meanwhile
         return results
     }
 
-    /// Sends one chunk as the full document text, waits for its diagnostics, then fetches the fixes.
-    private func lintChunk(_ text: String, deadline: Date) -> [WritingSuggestion]? {
+    /// Sends one chunk as its own document, waits for its diagnostics, then fetches the fixes. `complete` is false when
+    /// some fixes missed the deadline (those suggestions have no replacement).
+    private func lintChunk(_ text: String, deadline: Date) -> (suggestions: [WritingSuggestion], complete: Bool)? {
+        retireDocument()
         let waiter = Waiter()
         state.lock(); diagnosticsWaiter = waiter; let uri = currentURI; state.unlock()
-        version += 1
-        if documentOpen {
-            notify("textDocument/didChange", ["textDocument": ["uri": uri, "version": version], "contentChanges": [["text": text]]])
-        } else {
-            notify("textDocument/didOpen", ["textDocument": ["uri": uri, "languageId": Self.languageID, "version": version, "text": text]])
-            documentOpen = true
-        }
+        notify("textDocument/didOpen", ["textDocument": ["uri": uri, "languageId": Self.languageID, "version": 1, "text": text]])
+        openURI = uri
         guard waiter.semaphore.wait(timeout: .now() + max(0, deadline.timeIntervalSinceNow)) == .success,
               let diagnostics = waiter.value as? [[String: Any]] else {
-            // The answer may still arrive. Close this URI and move to a fresh one so it can never be misread.
-            retireDocument(uri)
+            retireDocument() // a late answer will name this URI and be dropped
             Self.status = "Checks: Apple spelling and grammar for now. Harper did not answer in time."
             return nil
         }
@@ -330,14 +350,15 @@ final class HarperEngine: @unchecked Sendable {
             return send(request: "textDocument/codeAction", ["textDocument": ["uri": uri], "range": range, "context": ["diagnostics": [diagnostic]]])
         }
         let actions = ids.map { id in id.flatMap { collect($0, deadline: deadline) } as? [[String: Any]] }
-        return HarperMapper.map(diagnostics: diagnostics, actions: actions, in: text)
+        return (HarperMapper.map(diagnostics: diagnostics, actions: actions, in: text), !actions.contains { $0 == nil })
     }
 
-    /// Closes `uri` and moves to a fresh one, so any publish still in flight for it is dropped. Caller holds lintLock.
-    private func retireDocument(_ uri: String) {
-        if documentOpen { notify("textDocument/didClose", ["textDocument": ["uri": uri]]) }
+    /// Closes the open document (if any) and moves to a fresh URI, so any publish still in flight is dropped.
+    /// Caller holds lintLock.
+    private func retireDocument() {
+        if let openURI { notify("textDocument/didClose", ["textDocument": ["uri": openURI]]) }
+        openURI = nil
         state.lock(); diagnosticsWaiter = nil; uriGeneration += 1; state.unlock()
-        documentOpen = false
     }
 
     private func remember(_ found: [WritingSuggestion], for chunk: String) {
@@ -361,7 +382,35 @@ final class HarperEngine: @unchecked Sendable {
             }
         }
         if chunkStart < text.length || ranges.isEmpty { ranges.append(NSRange(location: chunkStart, length: text.length - chunkStart)) }
-        return ranges
+        return ranges.flatMap { $0.length > chunkHardLimit ? split(oversized: $0, in: text) : [$0] }
+    }
+
+    /// A line longer than `chunkHardLimit` (one huge paragraph): cut at sentence ends, or at whitespace inside an
+    /// oversized sentence, never inside a composed character such as an emoji.
+    static func split(oversized range: NSRange, in text: NSString) -> [NSRange] {
+        var cuts: [Int] = []
+        text.enumerateSubstrings(in: range, options: [.bySentences, .substringNotRequired]) { _, _, enclosing, _ in
+            cuts.append(NSMaxRange(enclosing))
+        }
+        var pieces: [NSRange] = []
+        var start = range.location
+        var lastCut = start
+        func emit(upTo end: Int) { pieces.append(NSRange(location: start, length: end - start)); start = end; lastCut = end }
+        for cut in cuts where cut > start {
+            if cut - start > chunkHardLimit, lastCut > start { emit(upTo: lastCut) }
+            while cut - start > chunkHardLimit {
+                // A single sentence longer than the limit: back off to whitespace, then to a character boundary.
+                var end = start + chunkHardLimit
+                let window = NSRange(location: start + chunkHardLimit / 2, length: chunkHardLimit / 2)
+                let space = text.rangeOfCharacter(from: .whitespacesAndNewlines, options: .backwards, range: window)
+                if space.location != NSNotFound { end = NSMaxRange(space) }
+                else { end = text.rangeOfComposedCharacterSequence(at: end).location }
+                emit(upTo: end)
+            }
+            lastCut = cut
+        }
+        if start < NSMaxRange(range) { pieces.append(NSRange(location: start, length: NSMaxRange(range) - start)) }
+        return pieces
     }
 
     // MARK: Dictionary
@@ -380,9 +429,9 @@ final class HarperEngine: @unchecked Sendable {
             guard isRunning else { return }
             // harper-ls re-publishes the open document after a command (response first, then the publish), and may
             // or may not for a closed one. Retire the URI so that publish can never answer the next lint.
-            state.lock(); let uri = currentURI; state.unlock()
+            state.lock(); let uri = openURI ?? currentURI; state.unlock()
             _ = request("workspace/executeCommand", ["command": command, "arguments": arguments(uri)], deadline: Date(timeIntervalSinceNow: 1))
-            retireDocument(uri)
+            retireDocument()
             cache.removeAll(); cacheOrder.removeAll()
         }
     }
@@ -426,27 +475,41 @@ final class HarperEngine: @unchecked Sendable {
         write(message)
     }
 
+    /// Queues a frame for the sidecar. Never blocks the caller and never holds `state` across pipe I/O: if
+    /// harper-ls stops reading, only the write queue waits, and callers still hit their deadlines.
     @discardableResult
     private func write(_ message: [String: Any]) -> Bool {
         guard let body = try? JSONSerialization.data(withJSONObject: message) else { return false }
         var frame = Data("Content-Length: \(body.count)\r\n\r\n".utf8)
         frame.append(body)
-        state.lock(); defer { state.unlock() }
+        state.lock(); let input = self.input; state.unlock()
         guard let input else { return false }
-        do { try input.write(contentsOf: frame); return true } catch { return false }
+        writeQueue.async { try? input.write(contentsOf: frame) } // EPIPE after an exit is reported by processDidExit
+        return true
     }
 
-    /// Content-Length framing: accumulate bytes, peel off complete messages.
     private func receive(_ data: Data) {
         state.lock()
         buffer.append(data)
+        let messages = Self.takeFrames(from: &buffer)
+        state.unlock()
+        messages.forEach(handle)
+    }
+
+    /// Content-Length framing: removes every complete frame from `buffer` and returns the decoded messages. A header
+    /// without a valid length (missing, non-numeric, negative or over `maxFrameBytes`) is skipped, never trusted.
+    static func takeFrames(from buffer: inout Data) -> [[String: Any]] {
         var messages: [[String: Any]] = []
         let separator = Data("\r\n\r\n".utf8)
         while let headerEnd = buffer.range(of: separator) {
             let header = String(decoding: buffer[buffer.startIndex..<headerEnd.lowerBound], as: UTF8.self)
-            guard let lengthLine = header.split(separator: "\r\n").first(where: { $0.lowercased().hasPrefix("content-length:") }),
-                  let length = Int(lengthLine.split(separator: ":")[1].trimmingCharacters(in: .whitespaces)) else {
-                buffer.removeSubrange(buffer.startIndex..<headerEnd.upperBound) // malformed header: skip it
+            let length = header.components(separatedBy: "\r\n").lazy.compactMap { line -> Int? in
+                let parts = line.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
+                guard parts.count == 2, parts[0].trimmingCharacters(in: .whitespaces).lowercased() == "content-length" else { return nil }
+                return Int(parts[1].trimmingCharacters(in: .whitespaces))
+            }.first
+            guard let length, (0...maxFrameBytes).contains(length) else {
+                buffer.removeSubrange(buffer.startIndex..<headerEnd.upperBound) // malformed header: drop it, keep reading
                 continue
             }
             guard buffer.distance(from: headerEnd.upperBound, to: buffer.endIndex) >= length else { break }
@@ -456,8 +519,7 @@ final class HarperEngine: @unchecked Sendable {
             }
             buffer.removeSubrange(buffer.startIndex..<bodyEnd)
         }
-        state.unlock()
-        messages.forEach(handle)
+        return messages
     }
 
     private func handle(_ message: [String: Any]) {
@@ -480,7 +542,7 @@ final class HarperEngine: @unchecked Sendable {
         } else if method == "textDocument/publishDiagnostics",
                   let params = message["params"] as? [String: Any] {
             state.lock()
-            // Publishes for a retired URI, or with nobody waiting, are not an answer to anything: drop them.
+            // Only a publish for the document just sent answers it; anything else is late or duplicate: drop it.
             if params["uri"] as? String == currentURI, let waiter = diagnosticsWaiter {
                 diagnosticsWaiter = nil
                 waiter.value = params["diagnostics"] as? [[String: Any]] ?? []
