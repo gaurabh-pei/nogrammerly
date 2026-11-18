@@ -16,6 +16,16 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+    - name: Read harper-ls pin
+      id: harper
+      run: grep -E '^HARPER_(VERSION|BINARY_SHA256)=' Vendor/harper-ls/harper-ls.pin >> "$GITHUB_OUTPUT"
+    - name: Cache harper-ls
+      uses: actions/cache@v4
+      with:
+        path: Vendor/harper-ls/bin
+        key: harper-ls-${{ steps.harper.outputs.HARPER_VERSION }}-${{ steps.harper.outputs.HARPER_BINARY_SHA256 }}-${{ runner.arch }}
+    - name: Fetch harper-ls (sha256-verified, also on cache hit)
+      run: script/fetch_harper_ls.sh
     - name: Build
       run: swift build -v
     - name: Run tests
