@@ -1,5 +1,5 @@
 {
- "note": "Benchmark corpus written for this PR. `clean`: ordinary work and personal messages with no intended errors (false-positive check). `errors`: the same messages with common typos and grammar slips injected. `chat`: casual Slack-style messages (lowercase, shorthand, @mentions, URLs, emoji).",
+ "note": "Benchmark corpus written for this PR. `clean`: ordinary work and personal messages with no intended errors (false-positive check). `errors`: the same messages with common typos and grammar slips injected. `chat`: casual Slack-style messages (lowercase, shorthand, @mentions, URLs, emoji). `spelling_fixes`: the intended word for each misspelling in `errors`, to score the first suggested replacement.",
  "clean": [
   "Hi Maria, thanks for sending the contract over. I read through it this morning and the payment terms look right. Can we move the start date to March 3 so the team has time to onboard?",
   "Quick update on the migration: the staging database is copied, the scripts ran without errors, and QA starts tomorrow at 9. I'll post results in this channel by end of day.",
@@ -55,5 +55,15 @@
   "on it",
   "just saw this, looking now",
   "nvm figured it out"
- ]
+ ],
+ "spelling_fixes": {
+  "recieved": "received",
+  "friday": "Friday",
+  "wenesday": "Wednesday",
+  "monday": "Monday",
+  "acess": "access",
+  "irregardless": "regardless",
+  "Im": "I'm",
+  "doesnt": "doesn't"
+ }
 }
