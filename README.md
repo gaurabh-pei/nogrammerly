@@ -148,6 +148,17 @@ You need the Xcode Command Line Tools (Swift 5.10+). Full Xcode isn't required.
 swift test                           # run the WritingEngine tests (also run by GitHub Actions)
 ```
 
+#### Optional: Harper checker
+
+[Harper](https://github.com/Automattic/harper) (Apache-2.0) is an open-source grammar checker that runs entirely on your Mac. Building with it bundles the pinned `harper-ls` release (about 59 MB) as a helper. Harper then replaces Apple's spelling and grammar checker as the main source of underlines, and Nogrammerly's own phrase rules and the on-device AI keep running as before.
+
+```bash
+NOGRAMMERLY_BUNDLE_HARPER=1 ./script/build_and_run.sh   # downloads and verifies harper-ls, then bundles it
+./script/fetch_harper_ls.sh                             # fetch only (used by the tests and CI)
+```
+
+At run time, `NOGRAMMERLY_ENGINE=apple` switches back to Apple's checker, `HARPER_LS_PATH=/path/to/harper-ls` points at another build, and `NOGRAMMERLY_APPLE_SECONDARY=1` also merges Apple's results behind Harper's. The sidebar always says which checker is active. Without the build flag, nothing changes.
+
 The icon is generated from `Assets/Nogrammerly-icon.png` (a 1024×1024 image with square edges that fills the whole canvas). `script/create_icon.sh` masks it to the macOS rounded-square shape and builds the `.icns`.
 
 ### Windows
