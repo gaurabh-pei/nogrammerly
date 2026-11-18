@@ -1,11 +1,12 @@
 import AppKit
 
-/// Fast, synchronous checks: the macOS spelling/grammar checker plus local style rules.
+/// Fast, synchronous checks: Harper (bundled harper-ls) or the macOS spelling/grammar checker, plus local style rules.
 /// Deeper grammar, clarity and tone checks come asynchronously from `AIWriter`.
 enum WritingEngine {
     /// Fields longer than this are skipped to keep system-wide polling cheap.
     static let maxLength = 20_000
     static let spellTag = NSSpellChecker.uniqueSpellDocumentTag()
+    private static let appleSecondary = ProcessInfo.processInfo.environment["NOGRAMMERLY_APPLE_SECONDARY"] == "1"
 
     private static let styleRules: [(phrase: String, replacement: String?, title: String, kind: SuggestionKind)] = [
         ("utilize", "use", "Prefer simpler wording", .clarity),
@@ -22,6 +23,11 @@ enum WritingEngine {
     ]
 
     static func analyze(_ text: String) -> WritingAnalysis {
+        analyze(text, harper: HarperEngine.shared)
+    }
+
+    /// `harper` nil means the Apple checker (NOGRAMMERLY_ENGINE=apple, or harper-ls not bundled).
+    static func analyze(_ text: String, harper: HarperEngine?) -> WritingAnalysis {
         let nsText = text as NSString
         var suggestions: [WritingSuggestion] = []
         for rule in styleRules {
@@ -49,8 +55,18 @@ enum WritingEngine {
 
         let words = text.split { $0.isWhitespace }.count
         let avg = words / max(sentenceCount, 1)
-        // Specific phrase rules win over the dictionary where they overlap (e.g. "utilize" → "use", not "utilise").
-        let unique = merge(suggestions, checkSpellingAndGrammar(text))
+        let unique: [WritingSuggestion]
+        if let harper, let found = harper.lint(text) {
+            HarperEngine.status = HarperEngine.selection.reason
+            // Harper is primary; the local phrase rules fill in what it does not cover ("utilize", "I think").
+            // NOGRAMMERLY_APPLE_SECONDARY=1 also merges the Apple checker behind both.
+            let secondary = appleSecondary ? merge(suggestions, checkSpellingAndGrammar(text)) : suggestions
+            unique = merge(found, secondary)
+        } else {
+            if harper != nil, !text.isEmpty { HarperEngine.status = "Checks: Apple spelling and grammar for now. Harper did not answer in time." }
+            // Specific phrase rules win over the dictionary where they overlap (e.g. "utilize" → "use", not "utilise").
+            unique = merge(suggestions, checkSpellingAndGrammar(text))
+        }
         let readability = max(35, min(100, 100 - max(avg - 12, 0) * 3 - unique.count * 2))
         let tone = text.contains("!") ? "Enthusiastic" : text.lowercased().contains("please") ? "Polite" : "Neutral"
         return WritingAnalysis(suggestions: unique, words: words, readability: readability, tone: tone)

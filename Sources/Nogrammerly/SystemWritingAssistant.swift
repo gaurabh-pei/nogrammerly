@@ -384,6 +384,7 @@ final class SystemWritingAssistant: NSObject, NSMenuDelegate {
     @objc private func learnWord(_ sender: NSMenuItem) {
         guard let suggestion = suggestion(for: sender) else { return }
         NSSpellChecker.shared.learnWord(suggestion.original)
+        if let harper = HarperEngine.shared { DispatchQueue.global(qos: .utility).async { harper.addToDictionary(suggestion.original) } }
         suggestions.removeAll { $0.isSpelling && $0.original == suggestion.original }
         layoutMarks()
     }
