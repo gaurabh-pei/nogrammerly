@@ -157,9 +157,10 @@ import NogrammerlyCore
         #expect(chunks.first?.location == 0)
         #expect(chunks.reduce(0) { $0 + $1.length } == text.length)
         for (a, b) in zip(chunks, chunks.dropFirst()) { #expect(NSMaxRange(a) == b.location) }
-        for chunk in chunks.dropLast() {
+        let runStart = text.length - 5_000 // the trailing 5,000-unit line is oversized and gets split by length
+        for chunk in chunks {
             #expect(chunk.length <= HarperEngine.chunkHardLimit)
-            #expect(text.character(at: NSMaxRange(chunk) - 1) == 0x0A) // ends at a line break
+            if NSMaxRange(chunk) <= runStart { #expect(text.character(at: NSMaxRange(chunk) - 1) == 0x0A) } // ends at a line break
         }
         #expect(HarperEngine.chunks(of: "") == [NSRange(location: 0, length: 0)])
     }

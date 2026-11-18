@@ -35,6 +35,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource,
         NotificationCenter.default.addObserver(forName: HarperEngine.statusDidChange, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.checkerStatus.stringValue = "✦  " + HarperEngine.status }
         }
+        // Whatever was checked with the Apple fallback while Harper started gets checked again by Harper.
+        NotificationCenter.default.addObserver(forName: HarperEngine.didBecomeReady, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshAnalysis(); self?.systemAssistant.refreshAnalysis() }
+        }
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1220, height: 780), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         window.title = "Nogrammerly"
         window.isReleasedWhenClosed = false
