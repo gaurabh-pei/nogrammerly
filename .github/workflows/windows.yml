@@ -51,4 +51,6 @@ jobs:
       if: startsWith(github.ref, 'refs/tags/v')
       env:
         GH_TOKEN: ${{ github.token }}
-      run: gh release upload ${{ github.ref_name }} Nogrammerly-Windows-${{ matrix.arch }}.zip --clobber
+        TAG: ${{ github.ref_name }}
+        ARCH: ${{ matrix.arch }}
+      run: gh release upload "$env:TAG" "Nogrammerly-Windows-$env:ARCH.zip" --clobber
