@@ -20,9 +20,10 @@ Powered by the AI built into your device: Apple Intelligence on Mac and iPhone, 
   <a href="https://github.com/gaurabh-pei/nogrammerly/releases/latest/download/Nogrammerly-Installer.dmg"><img src="Assets/readme/download-mac.svg" width="270" alt="Download for Mac (.dmg)"></a>
   <a href="https://github.com/gaurabh-pei/nogrammerly/releases/download/v1.2.0-beta.1/Nogrammerly-Windows-x64.zip"><img src="Assets/readme/download-windows-x64.svg" width="270" alt="Download for Windows x64 (.zip, beta)"></a>
   <a href="https://github.com/gaurabh-pei/nogrammerly/releases/download/v1.2.0-beta.1/Nogrammerly-Windows-arm64.zip"><img src="Assets/readme/download-windows-arm64.svg" width="270" alt="Download for Windows on Arm (.zip, beta)"></a>
+  <a href="https://github.com/gaurabh-pei/nogrammerly/releases/download/v1.4.0-beta.1/Nogrammerly-iOS-unsigned.ipa"><img src="Assets/readme/download-iphone.svg" width="270" alt="Download for iPhone and iPad (.ipa to sideload, beta)"></a>
 </p>
 
-<p align="center"><sub>Each button starts the download straight away. Mac: 4 MB · Windows: about 110 MB · <a href="https://github.com/gaurabh-pei/nogrammerly/releases">All releases</a> · <a href="#install">Install steps</a> · <a href="#how-it-works">How it works</a> · <a href="CONTRIBUTING.md">Contribute</a></sub></p>
+<p align="center"><sub>Each button starts the download straight away. Mac: 4 MB · Windows: about 110 MB · iPhone: 3 MB (<a href="#iphone-install">how to install</a>) · <a href="https://github.com/gaurabh-pei/nogrammerly/releases">All releases</a> · <a href="#install">Install steps</a> · <a href="#how-it-works">How it works</a> · <a href="CONTRIBUTING.md">Contribute</a></sub></p>
 
 <p align="center"><img src="Assets/demo.gif" width="820" alt="Nogrammerly fixing spelling and wordiness with a right-click, then rewriting the message in a professional tone"></p>
 
@@ -140,14 +141,26 @@ iOS doesn't let apps draw over other apps, so on iPhone and iPad Nogrammerly is 
 
 The [Windows guide](windows/README.md) covers setting up the AI, troubleshooting and building from source.
 
-### 📱 iPhone and iPad (beta, build from source)
+<a id="iphone-install"></a>
 
-It isn't on the App Store or TestFlight yet, so you install it from Xcode onto your own device:
+### 📱 iPhone and iPad (beta)
+
+It isn't on the App Store yet. You install it yourself and sign it with your own Apple ID, which is free.
+
+**Option A: sideload the ready-made app**
+
+1. **[Download Nogrammerly-iOS-unsigned.ipa](https://github.com/gaurabh-pei/nogrammerly/releases/download/v1.4.0-beta.1/Nogrammerly-iOS-unsigned.ipa)** (3 MB).
+2. Install it with a sideloading tool that signs apps with your Apple ID, such as [AltStore](https://altstore.io) or [Sideloadly](https://sideloadly.io) (Mac or Windows). Keep the app extensions turned on, because the keyboard is one.
+3. On the iPhone, go to **Settings › General › VPN & Device Management** and trust your Apple ID.
+4. Go to **Settings › Apps › Nogrammerly › Keyboards** and turn on **Nogrammerly**. Then, in any app, hold the 🌐 key and choose Nogrammerly.
+
+With a free Apple ID, Apple makes sideloaded apps stop opening after 7 days until you re-sign them (AltStore and Sideloadly can do this for you), and the app and keyboard use 2 of your 10 App IDs a week. On Windows, [iPASide](https://github.com/pwnapplehat/iPASide) can install the app too, but it removes app extensions, so you would get the editor without the keyboard.
+
+**Option B: build it with Xcode**
 
 1. On a Mac with Xcode 26 or later, open `iOS/Nogrammerly.xcodeproj`.
-2. Under **Signing & Capabilities**, choose your Apple ID team for both the **NogrammerlyiOS** and **NogrammerlyKeyboard** targets. A free Apple ID works, but the app then stops opening after 7 days until you install it again.
-3. Connect your iPhone, pick it as the run destination and press **Run**.
-4. On the iPhone, go to **Settings › Apps › Nogrammerly › Keyboards** and turn on **Nogrammerly**. Then, in any app, hold the 🌐 key and choose Nogrammerly.
+2. Under **Signing & Capabilities**, choose your Apple ID team for both the **NogrammerlyiOS** and **NogrammerlyKeyboard** targets.
+3. Connect your iPhone, pick it as the run destination and press **Run**. Then turn the keyboard on as in step 4 above.
 
 | Requirement | |
 |---|---|
