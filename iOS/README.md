@@ -7,6 +7,12 @@ It shares the writing engine (`NogrammerlyCore` in the root Swift package) with 
 - The keyboard does not request Full Access, so iOS keeps it off the network.
 - A keyboard only sees the text before the cursor, so fixes apply to what you have just typed.
 
+## Unsigned IPA
+
+`./script/create_ipa.sh` builds `dist/Nogrammerly-iOS-unsigned.ipa` (app + keyboard) with code signing off,
+for AltStore or Sideloadly to sign with the user's Apple ID. CI builds it on every push and attaches it
+to the GitHub release for `v*` tags.
+
 ## Build
 
 ```sh
