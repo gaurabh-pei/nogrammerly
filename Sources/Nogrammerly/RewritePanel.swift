@@ -1,4 +1,5 @@
 import AppKit
+import NogrammerlyCore
 
 /// Grammarly-style rewrite card shown next to the text being rewritten: ask for a writing style, show the rewrite,
 /// then Accept / Copy / Reject / Retry (Retry asks for a style again). It never takes focus, so the other app keeps

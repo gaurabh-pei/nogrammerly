@@ -1,4 +1,5 @@
 import AppKit
+import NogrammerlyCore
 import ApplicationServices
 
 /// First-run and on-demand setup guide. Each step shows its live status, so the user can see exactly what is left to do.

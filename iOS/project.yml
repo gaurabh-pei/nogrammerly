@@ -1,0 +1,83 @@
+# Generate the Xcode project with:  cd iOS && xcodegen
+name: Nogrammerly
+options:
+  bundleIdPrefix: com.nogrammerly
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+packages:
+  Nogrammerly:
+    path: ..
+settings:
+  base:
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "6.0"
+    # Set your Apple team here (or in Xcode → Signing & Capabilities) to run on a real iPhone.
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+targets:
+  # Not "Nogrammerly": that name is taken by the Mac app's scheme in the shared Swift package.
+  NogrammerlyiOS:
+    type: application
+    platform: iOS
+    sources: [App]
+    dependencies:
+      - package: Nogrammerly
+        product: NogrammerlyCore
+      - target: NogrammerlyKeyboard
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Nogrammerly
+        UILaunchScreen: {}
+        ITSAppUsesNonExemptEncryption: false
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.nogrammerly.ios
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        TARGETED_DEVICE_FAMILY: "1,2"
+  NogrammerlyKeyboard:
+    type: app-extension
+    platform: iOS
+    sources: [Keyboard]
+    dependencies:
+      - package: Nogrammerly
+        product: NogrammerlyCore
+    info:
+      path: Keyboard/Info.plist
+      properties:
+        CFBundleDisplayName: Nogrammerly
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.keyboard-service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).KeyboardViewController
+          NSExtensionAttributes:
+            IsASCIICapable: true
+            PrefersRightToLeft: false
+            PrimaryLanguage: en-US
+            # No Full Access: the keyboard never needs the network, so typed text cannot leave the device.
+            RequestsOpenAccess: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.nogrammerly.ios.keyboard
+        TARGETED_DEVICE_FAMILY: "1,2"
+  NogrammerlyUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [UITests]
+    dependencies:
+      - target: NogrammerlyiOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.nogrammerly.ios.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: NogrammerlyiOS
+schemes:
+  NogrammerlyiOS:
+    build:
+      targets:
+        NogrammerlyiOS: all
+    test:
+      targets: [NogrammerlyUITests]

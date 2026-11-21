@@ -15,3 +15,7 @@ Assets/Nogrammerly.iconset/
 # .NET build output (windows/)
 windows/**/bin/
 windows/**/obj/
+
+# Xcode per-user state
+xcuserdata/
+*.xcresult

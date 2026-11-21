@@ -1,4 +1,5 @@
 import ServiceManagement
+import NogrammerlyCore
 
 /// Starts Nogrammerly when the user logs in, so everywhere mode survives a restart.
 @MainActor

@@ -1,28 +1,28 @@
 import Foundation
 import FoundationModels
 
-/// Grammar/clarity/tone checks and rewrites using Apple's on-device language model (macOS 26+ with Apple Intelligence).
-/// Text never leaves the Mac. Every entry point degrades to "no result" when the model is unavailable.
+/// Grammar/clarity/tone checks and rewrites using Apple's on-device language model (macOS/iOS 26+ with Apple Intelligence).
+/// Text never leaves the device. Every entry point degrades to "no result" when the model is unavailable.
 @MainActor
-enum AIWriter {
+public enum AIWriter {
     /// Paragraphs longer than this are skipped; the on-device context window is small.
     private static let maxParagraphLength = 2_500
     private static var paragraphCache: [String: [WritingSuggestion]] = [:]
 
-    static var isAvailable: Bool {
-        if #available(macOS 26, *) { return SystemLanguageModel.default.isAvailable }
+    public static var isAvailable: Bool {
+        if #available(macOS 26, iOS 26, *) { return SystemLanguageModel.default.isAvailable }
         return false
     }
 
     /// Loads the model into memory ahead of the first check; a cold first request can otherwise take a minute.
-    static func prewarm() {
-        guard #available(macOS 26, *), isAvailable else { return }
+    public static func prewarm() {
+        guard #available(macOS 26, iOS 26, *), isAvailable else { return }
         LanguageModelSession(model: SystemLanguageModel(guardrails: .permissiveContentTransformations)).prewarm()
     }
 
     /// Proofreads `text` paragraph by paragraph; unchanged paragraphs come from cache, so typing only re-checks the edited one.
-    static func proofread(_ text: String) async -> [WritingSuggestion] {
-        guard #available(macOS 26, *), isAvailable else { return [] }
+    public static func proofread(_ text: String) async -> [WritingSuggestion] {
+        guard #available(macOS 26, iOS 26, *), isAvailable else { return [] }
         let nsText = text as NSString
         var paragraphs: [(String, NSRange)] = []
         nsText.enumerateSubstrings(in: NSRange(location: 0, length: nsText.length), options: .byParagraphs) { paragraph, range, _, _ in
@@ -45,8 +45,8 @@ enum AIWriter {
         return found
     }
 
-    static func rewrite(_ text: String, tone: WritingTone) async -> String? {
-        guard #available(macOS 26, *), isAvailable else { return nil }
+    public static func rewrite(_ text: String, tone: WritingTone) async -> String? {
+        guard #available(macOS 26, iOS 26, *), isAvailable else { return nil }
         let session = LanguageModelSession(model: SystemLanguageModel(guardrails: .permissiveContentTransformations), instructions: """
             Rewrite the user's text so it reads \(tone.instruction). Fix any grammar, spelling and punctuation mistakes. \
             Keep the original meaning, language, names, numbers, links and line breaks. \
@@ -56,7 +56,7 @@ enum AIWriter {
         return output
     }
 
-    @available(macOS 26, *)
+    @available(macOS 26, iOS 26, *)
     private static func proofreadParagraph(_ paragraph: String) async -> [WritingSuggestion] {
         let session = LanguageModelSession(model: SystemLanguageModel(guardrails: .permissiveContentTransformations), instructions: """
             You are a meticulous proofreader. Report every grammar, spelling, punctuation, word-choice, clarity and tone problem in the user's text. \
@@ -92,7 +92,7 @@ enum AIWriter {
         return range.location == NSNotFound || claimed.contains(where: { NSIntersectionRange($0, range).length > 0 }) ? nil : range
     }
 
-    @available(macOS 26, *)
+    @available(macOS 26, iOS 26, *)
     private static let proofreadSchema: GenerationSchema = {
         let string = DynamicGenerationSchema(type: String.self)
         let issue = DynamicGenerationSchema(name: "Issue", properties: [

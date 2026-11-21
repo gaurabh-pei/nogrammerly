@@ -1,11 +1,14 @@
+#if canImport(AppKit)
 import AppKit
+#else
+import UIKit
+#endif
 
-/// Fast, synchronous checks: the macOS spelling/grammar checker plus local style rules.
+/// Fast, synchronous checks: the system spelling (and, on macOS, grammar) checker plus local style rules.
 /// Deeper grammar, clarity and tone checks come asynchronously from `AIWriter`.
-enum WritingEngine {
+public enum WritingEngine {
     /// Fields longer than this are skipped to keep system-wide polling cheap.
-    static let maxLength = 20_000
-    static let spellTag = NSSpellChecker.uniqueSpellDocumentTag()
+    public static let maxLength = 20_000
 
     private static let styleRules: [(phrase: String, replacement: String?, title: String, kind: SuggestionKind)] = [
         ("utilize", "use", "Prefer simpler wording", .clarity),
@@ -21,7 +24,7 @@ enum WritingEngine {
         ("sorry to bother you", nil, "This may undercut your request", .delivery)
     ]
 
-    static func analyze(_ text: String) -> WritingAnalysis {
+    public static func analyze(_ text: String) -> WritingAnalysis {
         let nsText = text as NSString
         var suggestions: [WritingSuggestion] = []
         for rule in styleRules {
@@ -57,7 +60,7 @@ enum WritingEngine {
     }
 
     /// Combines suggestion lists, dropping any whose range overlaps one already kept (earlier lists win).
-    static func merge(_ primary: [WritingSuggestion], _ secondary: [WritingSuggestion]) -> [WritingSuggestion] {
+    public static func merge(_ primary: [WritingSuggestion], _ secondary: [WritingSuggestion]) -> [WritingSuggestion] {
         var kept: [WritingSuggestion] = []
         for suggestion in primary + secondary where !kept.contains(where: { NSIntersectionRange($0.range, suggestion.range).length > 0 || $0.range == suggestion.range }) {
             kept.append(suggestion)
@@ -66,7 +69,7 @@ enum WritingEngine {
     }
 
     /// Rule-based rewrite used when the on-device model is unavailable.
-    static func rewrite(_ text: String, tone: WritingTone) -> String {
+    public static func rewrite(_ text: String, tone: WritingTone) -> String {
         var result = text as NSString
         for suggestion in analyze(text).suggestions.reversed() {
             if let replacement = suggestion.replacement { result = result.replacingCharacters(in: suggestion.range, with: replacement) as NSString }
@@ -81,7 +84,7 @@ enum WritingEngine {
     }
 
     /// Range of the sentence containing `range`, without trailing whitespace.
-    static func sentenceRange(containing range: NSRange, in text: String) -> NSRange {
+    public static func sentenceRange(containing range: NSRange, in text: String) -> NSRange {
         let nsText = text as NSString
         var found = range
         nsText.enumerateSubstrings(in: NSRange(location: 0, length: nsText.length), options: [.bySentences, .substringNotRequired]) { _, sentence, _, stop in
@@ -94,9 +97,12 @@ enum WritingEngine {
     }
 
     /// Case-insensitive whole-word occurrences of `phrase`.
-    static func wordRanges(of phrase: String, in text: String) -> [NSRange] {
+    public static func wordRanges(of phrase: String, in text: String) -> [NSRange] {
         matches(of: "(?<![\\p{L}\\p{N}'])\(NSRegularExpression.escapedPattern(for: phrase))(?![\\p{L}\\p{N}])", in: text, options: .caseInsensitive)
     }
+
+    #if canImport(AppKit)
+    private static let macSpellTag = NSSpellChecker.uniqueSpellDocumentTag()
 
     private static func checkSpellingAndGrammar(_ text: String) -> [WritingSuggestion] {
         let checker = NSSpellChecker.shared
@@ -104,13 +110,13 @@ enum WritingEngine {
         let types = NSTextCheckingResult.CheckingType.spelling.rawValue | NSTextCheckingResult.CheckingType.grammar.rawValue
         var orthography: NSOrthography?
         var wordCount = 0
-        let results = checker.check(text, range: NSRange(location: 0, length: nsText.length), types: types, options: nil, inSpellDocumentWithTag: spellTag, orthography: &orthography, wordCount: &wordCount)
+        let results = checker.check(text, range: NSRange(location: 0, length: nsText.length), types: types, options: nil, inSpellDocumentWithTag: macSpellTag, orthography: &orthography, wordCount: &wordCount)
         var suggestions: [WritingSuggestion] = []
         for result in results {
             if result.resultType == .spelling {
                 let word = nsText.substring(with: result.range)
-                let guess = checker.correction(forWordRange: result.range, in: text, language: checker.language(), inSpellDocumentWithTag: spellTag)
-                    ?? checker.guesses(forWordRange: result.range, in: text, language: nil, inSpellDocumentWithTag: spellTag)?.first
+                let guess = checker.correction(forWordRange: result.range, in: text, language: checker.language(), inSpellDocumentWithTag: macSpellTag)
+                    ?? checker.guesses(forWordRange: result.range, in: text, language: nil, inSpellDocumentWithTag: macSpellTag)?.first
                 suggestions.append(WritingSuggestion(kind: .correctness, title: "Spelling", explanation: guess.map { "“\(word)” may be misspelled. Did you mean “\($0)”?" } ?? "“\(word)” may be misspelled.", original: word, replacement: guess, range: result.range, isSpelling: true))
             } else if result.resultType == .grammar {
                 for detail in result.grammarDetails ?? [] {
@@ -126,6 +132,36 @@ enum WritingEngine {
         }
         return suggestions
     }
+    #else
+    /// iOS has no grammar checker in UIKit; grammar comes from the on-device model instead.
+    private static func checkSpellingAndGrammar(_ text: String) -> [WritingSuggestion] {
+        let checker = UITextChecker()
+        let nsText = text as NSString
+        let language = spellingLanguage
+        var suggestions: [WritingSuggestion] = []
+        var offset = 0
+        while offset < nsText.length {
+            let range = checker.rangeOfMisspelledWord(in: text, range: NSRange(location: 0, length: nsText.length), startingAt: offset, wrap: false, language: language)
+            guard range.location != NSNotFound, range.length > 0 else { break }
+            let word = nsText.substring(with: range)
+            let guess = checker.guesses(forWordRange: range, in: text, language: language)?.first
+            suggestions.append(WritingSuggestion(kind: .correctness, title: "Spelling", explanation: guess.map { "“\(word)” may be misspelled. Did you mean “\($0)”?" } ?? "“\(word)” may be misspelled.", original: word, replacement: guess, range: range, isSpelling: true))
+            offset = NSMaxRange(range)
+        }
+        return suggestions
+    }
+
+    /// The user's preferred language if the checker supports it (e.g. "en_GB"), otherwise US English.
+    private static let spellingLanguage: String = {
+        let available = UITextChecker.availableLanguages
+        for preferred in Locale.preferredLanguages.map({ $0.replacingOccurrences(of: "-", with: "_") }) {
+            if let exact = available.first(where: { $0 == preferred }) { return exact }
+            let code = String(preferred.prefix { $0 != "_" })
+            if let sameLanguage = available.first(where: { $0.hasPrefix(code) }) { return sameLanguage }
+        }
+        return "en_US"
+    }()
+    #endif
 
     private static func matches(of pattern: String, in text: String, options: NSRegularExpression.Options = []) -> [NSRange] {
         guard let regex = try? NSRegularExpression(pattern: pattern, options: options) else { return [] }

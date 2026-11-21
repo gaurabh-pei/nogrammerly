@@ -1,4 +1,5 @@
 import AppKit
+import NogrammerlyCore
 import ApplicationServices
 
 @main
@@ -74,7 +75,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource,
     }
 
     private func makeSidebar() -> NSView {
-        let panel = NSView(); panel.wantsLayer = true; panel.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+        let panel = FillView(color: .controlBackgroundColor)
         let logo = NSTextField(labelWithString: "✦  Nogrammerly"); logo.font = .systemFont(ofSize: 17, weight: .bold); logo.textColor = .systemIndigo
         let newDoc = NSButton(title: "+  New document", target: self, action: #selector(newDocument)); newDoc.bezelColor = .systemIndigo
         everywhereStatus.font = .systemFont(ofSize: 12, weight: .semibold)
@@ -103,7 +104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource,
     }
 
     private func makeAssistant() -> NSView {
-        let panel = NSView(); panel.wantsLayer = true; panel.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+        let panel = FillView(color: .controlBackgroundColor)
         let title = NSTextField(labelWithString: "Writing assistant"); title.font = .systemFont(ofSize: 16, weight: .bold)
         toneControl.selectedSegment = 0
         let toneHint = NSTextField(labelWithString: "Tone used by ✦ Rewrite"); toneHint.font = .systemFont(ofSize: 11); toneHint.textColor = .secondaryLabelColor
@@ -122,7 +123,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource,
         let s = suggestions[row]
         let cell = NSTextField(wrappingLabelWithString: "\(s.kind.rawValue.uppercased())  •  \(s.title)\n\(s.explanation)\(s.replacement.map { "\nChange to ‘\($0)’" } ?? "\nClick to select")")
         cell.font = .systemFont(ofSize: 12); cell.textColor = .labelColor; cell.maximumNumberOfLines = 4
-        let bar = NSView(); bar.wantsLayer = true; bar.layer?.backgroundColor = s.kind.color.cgColor
+        let bar = FillView(color: s.kind.color)
         let stack = NSStackView(views: [bar, cell]); stack.spacing = 8
         bar.widthAnchor.constraint(equalToConstant: 3).isActive = true
         return stack
@@ -265,5 +266,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource,
         for suggestion in list where NSMaxRange(suggestion.range) <= all.length {
             layoutManager.addTemporaryAttributes([.underlineStyle: NSUnderlineStyle.thick.rawValue, .underlineColor: suggestion.kind.color], forCharacterRange: suggestion.range)
         }
+    }
+}
+
+/// A view filled with a dynamic colour. Layer colours are plain CGColors that never follow
+/// light/dark changes, so the colour is re-resolved in `updateLayer`, which AppKit calls
+/// whenever the effective appearance changes.
+final class FillView: NSView {
+    private let color: NSColor
+
+    init(color: NSColor) {
+        self.color = color
+        super.init(frame: .zero)
+        wantsLayer = true
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    override var wantsUpdateLayer: Bool { true }
+
+    override func updateLayer() {
+        effectiveAppearance.performAsCurrentDrawingAppearance { layer?.backgroundColor = color.cgColor }
     }
 }

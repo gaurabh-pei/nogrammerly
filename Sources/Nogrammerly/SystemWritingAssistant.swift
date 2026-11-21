@@ -1,4 +1,5 @@
 import AppKit
+import NogrammerlyCore
 import ApplicationServices
 
 /// Grammarly-style assistance in other apps: reads the focused text field through the Accessibility API,
