@@ -34,7 +34,11 @@ public sealed record WritingSuggestion(
     bool IsSpelling = false)
 {
     public Guid Id { get; } = Guid.NewGuid();
-    public string IgnoreKey => $"{Title}|{Original.ToLowerInvariant()}";
+    /// <summary>
+    /// Identifies "this change to this text". Titles are left out: the on-device model words them
+    /// differently on every run, so an ignored issue would come back the next time its paragraph is checked.
+    /// </summary>
+    public string IgnoreKey => $"{Original.ToLowerInvariant()}|{Replacement}";
 }
 
 public sealed record WritingAnalysis(IReadOnlyList<WritingSuggestion> Suggestions, int Words);

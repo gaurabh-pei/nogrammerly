@@ -85,10 +85,24 @@ public static class WritingEngine
         return tone switch
         {
             WritingTone.Professional => result.Replace("!", "."),
-            WritingTone.Confident => Regex.Replace(result, "I think ", "", RegexOptions.IgnoreCase),
-            WritingTone.Concise => Regex.Replace(result, "(just|very|really) ", "", RegexOptions.IgnoreCase),
+            WritingTone.Confident => DropWords(result, "I think"),
+            WritingTone.Concise => DropWords(result, "just|very|really"),
             _ => result,
         };
+    }
+
+    /// <summary>
+    /// Removes whole-word occurrences of <paramref name="words"/> (a regex alternation) with the space after them.
+    /// A word that opened a sentence hands its capital letter to the word that now does.
+    /// </summary>
+    private static string DropWords(string text, string words)
+    {
+        var sentenceStarts = SentenceSpans(text).Select(s => s.Start).ToHashSet();
+        return Regex.Replace(text, $@"(?<![\p{{L}}\p{{N}}'])(?:{words}) +(?<next>\p{{L}})?", match =>
+        {
+            var next = match.Groups["next"].Value;
+            return sentenceStarts.Contains(match.Index) && char.IsUpper(match.Value[0]) ? next.ToUpperInvariant() : next;
+        }, RegexOptions.IgnoreCase);
     }
 
     /// <summary>Span of the sentence containing <paramref name="span"/>, without surrounding whitespace.</summary>

@@ -30,7 +30,7 @@ internal sealed class SystemWritingAssistant : IDisposable
     private readonly Thread worker;
     private readonly SynchronizationContext ui;
     private readonly SpellChecker spellChecker = new(CultureInfo.CurrentUICulture.Name);
-    private readonly HashSet<string> ignored = [];
+    private readonly IgnoreList ignored;
     private readonly int ownProcessId = Environment.ProcessId;
     private volatile bool running = true;
 
@@ -46,8 +46,9 @@ internal sealed class SystemWritingAssistant : IDisposable
     /// <summary>Raised on the UI thread with a message for the user.</summary>
     public event Action<string>? Notice;
 
-    public SystemWritingAssistant()
+    public SystemWritingAssistant(IgnoreList ignored)
     {
+        this.ignored = ignored;
         ui = SynchronizationContext.Current ?? throw new InvalidOperationException("Create on the UI thread.");
         // UI Automation clients should run on an MTA thread of their own.
         worker = new Thread(Run) { IsBackground = true, Name = "UI Automation" };
@@ -72,7 +73,7 @@ internal sealed class SystemWritingAssistant : IDisposable
 
     public void Ignore(WritingSuggestion suggestion) => work.Add(() =>
     {
-        ignored.Add(suggestion.IgnoreKey);
+        ignored.Add(suggestion);
         Publish(suggestions.Where(s => s.IgnoreKey != suggestion.IgnoreKey).ToList());
     });
 
@@ -129,7 +130,7 @@ internal sealed class SystemWritingAssistant : IDisposable
         {
             field = focused;
             text = value;
-            suggestions = WritingEngine.Analyze(value, spellChecker.Check).Suggestions.Where(s => !ignored.Contains(s.IgnoreKey)).ToList();
+            suggestions = WritingEngine.Analyze(value, spellChecker.Check).Suggestions.Where(s => !ignored.Contains(s)).ToList();
             ScheduleProofread(value);
         }
         Publish(suggestions);
@@ -149,7 +150,7 @@ internal sealed class SystemWritingAssistant : IDisposable
             work.Add(() =>
             {
                 if (text != value) return;
-                suggestions = WritingEngine.Merge(suggestions, found.Where(s => !ignored.Contains(s.IgnoreKey)));
+                suggestions = WritingEngine.Merge(suggestions, found.Where(s => !ignored.Contains(s)));
                 Publish(suggestions);
             });
         }, cancellation.Token);
