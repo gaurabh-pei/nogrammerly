@@ -215,6 +215,8 @@ final class KeyboardViewController: UIInputViewController {
     }
 
     private func perform(_ edit: ContextEdit) {
+        // With text selected, the first delete would remove the selection instead of a character.
+        guard (textDocumentProxy.selectedText ?? "").isEmpty else { return }
         for _ in 0..<edit.deleteCount { textDocumentProxy.deleteBackward() }
         textDocumentProxy.insertText(edit.insert)
         scheduleCheck()
