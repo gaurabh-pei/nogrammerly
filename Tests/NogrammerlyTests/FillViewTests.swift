@@ -1,4 +1,5 @@
 import AppKit
+import NogrammerlyCore
 import Testing
 @testable import Nogrammerly
 

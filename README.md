@@ -1,14 +1,15 @@
 <p align="center"><img src="Assets/Nogrammerly-logo.png" width="520" alt="Nogrammerly"></p>
 
-<p align="center"><b>The free, open-source, 100% on-device Grammarly alternative for Mac and Windows.</b><br>
+<p align="center"><b>The free, open-source, 100% on-device Grammarly alternative for Mac, Windows and iPhone.</b><br>
 Spelling, grammar, clarity and tone checks plus one-click rewrites, in Slack, Teams, Outlook, Mail, Zoom, Notepad and almost every other app.<br>
-Powered by the AI built into your computer: Apple Intelligence on Mac, Phi Silica on Windows Copilot+ PCs. Your writing never leaves your device.</p>
+Powered by the AI built into your device: Apple Intelligence on Mac and iPhone, Phi Silica on Windows Copilot+ PCs. Your writing never leaves your device.</p>
 
 <p align="center">
   <a href="https://github.com/gaurabh-pei/nogrammerly/releases/latest"><img src="https://img.shields.io/github/v/release/gaurabh-pei/nogrammerly?label=release&color=4f46e5" alt="Latest release"></a>
   <a href="https://github.com/gaurabh-pei/nogrammerly/stargazers"><img src="https://img.shields.io/github/stars/gaurabh-pei/nogrammerly?style=flat&color=f59e0b&logo=github" alt="GitHub stars"></a>
   <img src="https://img.shields.io/badge/macOS-14%2B-black?logo=apple" alt="macOS 14+">
   <img src="https://img.shields.io/badge/Windows-10%20%7C%2011%20(beta)-0078D4?logo=windows" alt="Windows 10 and 11 (beta)">
+  <img src="https://img.shields.io/badge/iOS-26%2B%20(beta)-black?logo=apple" alt="iOS 26+ (beta)">
   <img src="https://img.shields.io/badge/privacy-100%25%20on--device-16a34a?logo=letsencrypt&logoColor=white" alt="100% on-device">
   <a href="https://github.com/gaurabh-pei/nogrammerly/actions/workflows/swift.yml"><img src="https://github.com/gaurabh-pei/nogrammerly/actions/workflows/swift.yml/badge.svg" alt="Mac build"></a>
   <a href="https://github.com/gaurabh-pei/nogrammerly/actions/workflows/windows.yml"><img src="https://github.com/gaurabh-pei/nogrammerly/actions/workflows/windows.yml/badge.svg" alt="Windows build"></a>
@@ -45,7 +46,7 @@ Cloud writing assistants read everything you type, including private Slack DMs, 
 | Account needed | ✅ **No** | ❌ Yes |
 | Works offline | ✅ **Yes** | ❌ No |
 | Source code | ✅ **Open (MIT)** | ❌ Closed |
-| Platforms | ✅ **Mac and Windows** | ➖ Varies |
+| Platforms | ✅ **Mac, Windows and iPhone/iPad** | ➖ Varies |
 
 </details>
 
@@ -84,7 +85,7 @@ The field button is a green ✦ when there's nothing to fix and turns red with a
 <td valign="top">
 
 ### 📝 Built-in editor
-On the Mac, a writing window with a writing score, a tone picker and a ✦ Rewrite button.
+On the Mac and iPhone, a writing window with a writing score, a tone picker and a ✦ Rewrite button.
 
 </td>
 <td valign="top">
@@ -95,6 +96,16 @@ The system spell checker, built-in style rules and the on-device model do all th
 </td>
 </tr>
 </table>
+
+### 📱 iPhone and iPad keyboard (beta)
+
+iOS doesn't let apps draw over other apps, so on iPhone and iPad Nogrammerly is a **keyboard**. Type in Messages, Mail, Slack, WhatsApp or any other app, and fixes appear above the keys. Tap a chip to fix it, or press and hold to ignore it. ✦ rewrites what you've typed in a professional, friendly, confident or concise tone, with a preview first. The keyboard **doesn't ask for Full Access**, so iOS blocks it from the network.
+
+<p align="center">
+  <img src="Assets/readme/ios-keyboard-light.png" width="250" alt="The Nogrammerly keyboard on iPhone, with a chip above the keys that fixes 'Teh' to 'The'.">
+  <img src="Assets/readme/ios-editor-light.png" width="250" alt="The Nogrammerly iPhone editor in light mode, with coloured underlines and suggestion cards.">
+  <img src="Assets/readme/ios-editor-dark.png" width="250" alt="The same editor in dark mode.">
+</p>
 
 <a id="install"></a>
 
@@ -129,6 +140,23 @@ The system spell checker, built-in style rules and the on-device model do all th
 
 The [Windows guide](windows/README.md) covers setting up the AI, troubleshooting and building from source.
 
+### 📱 iPhone and iPad (beta, build from source)
+
+It isn't on the App Store or TestFlight yet, so you install it from Xcode onto your own device:
+
+1. On a Mac with Xcode 26 or later, open `iOS/Nogrammerly.xcodeproj`.
+2. Under **Signing & Capabilities**, choose your Apple ID team for both the **NogrammerlyiOS** and **NogrammerlyKeyboard** targets. A free Apple ID works, but the app then stops opening after 7 days until you install it again.
+3. Connect your iPhone, pick it as the run destination and press **Run**.
+4. On the iPhone, go to **Settings › Apps › Nogrammerly › Keyboards** and turn on **Nogrammerly**. Then, in any app, hold the 🌐 key and choose Nogrammerly.
+
+| Requirement | |
+|---|---|
+| 📱 iOS | iOS 26 or later, on iPhone or iPad |
+| 🧠 AI checks & rewrites | Apple Intelligence turned on. Without it you still get spelling and style checks (iOS has no built-in grammar checker, so grammar comes from the AI). |
+| 🔑 Permission | None. The keyboard runs without Full Access. |
+
+A keyboard can only see the text before the cursor (some apps share only the current paragraph), so fixes apply to what you've just typed. The [iOS guide](iOS/README.md) covers building and testing.
+
 ## 🛠️ Build
 
 ### Mac
@@ -145,10 +173,14 @@ You need the Xcode Command Line Tools (Swift 5.10+). Full Xcode isn't required.
 ./script/build_and_run.sh --bundle   # build only
 ./script/build_and_run.sh --logs     # launch and stream logs
 ./script/create_dmg.sh               # build dist/Nogrammerly-Installer.dmg
-swift test                           # run the WritingEngine tests (also run by GitHub Actions)
+swift test                           # run the engine and app tests (also run by GitHub Actions)
 ```
 
 The icon is generated from `Assets/Nogrammerly-icon.png` (a 1024×1024 image with square edges that fills the whole canvas). `script/create_icon.sh` masks it to the macOS rounded-square shape and builds the `.icns`.
+
+### iPhone and iPad
+
+The iOS app and keyboard are in [`iOS/`](iOS/README.md). They need full Xcode 26+. The Xcode project is generated from `iOS/project.yml` with [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`, then `cd iOS && xcodegen`). The generated project is committed, so you only need XcodeGen when you change `project.yml`.
 
 ### Windows
 
@@ -207,22 +239,27 @@ sequenceDiagram
     App-->>You: text is fixed and ⌘Z still works
 ```
 
-| Step | 🍎 Mac | 🪟 Windows |
-|---|---|---|
-| 👀 Read the text you're typing | Accessibility API | UI Automation |
-| 🔤 Spelling | `NSSpellChecker` | Windows Spell Checking API |
-| 🧠 AI proofreading & rewrites | Apple Foundation Models | Phi Silica (Windows App SDK) |
-| 🖱️ Catch right-clicks on underlines | Event tap | Low-level mouse hook |
-| ✅ Replace text (undo works) | Accessibility API, then paste | Select with UI Automation, then type |
+| Step | 🍎 Mac | 🪟 Windows | 📱 iPhone/iPad |
+|---|---|---|---|
+| 👀 Read the text you're typing | Accessibility API | UI Automation | Keyboard extension (text before the cursor) |
+| 🔤 Spelling | `NSSpellChecker` | Windows Spell Checking API | `UITextChecker` |
+| 🧠 AI proofreading & rewrites | Apple Foundation Models | Phi Silica (Windows App SDK) | Apple Foundation Models |
+| 🖱️ Show fixes | Underlines, right-click menu, field button | Underlines, right-click menu, field button | Chips above the keys |
+| ✅ Replace text | Accessibility API, then paste | Select with UI Automation, then type | Delete back to the mistake, then retype |
+
+The Mac and iOS apps share one engine, the `NogrammerlyCore` Swift package library.
 
 | File | Responsibility |
 |---|---|
 | `Sources/Nogrammerly/SystemWritingAssistant.swift` | Cross-app monitoring, overlay underlines, right-click menu, field button, text replacement |
-| `Sources/Nogrammerly/WritingEngine.swift` | Spelling, grammar and style rules; merging suggestions |
-| `Sources/Nogrammerly/AIWriter.swift` | On-device Foundation Models proofreading and rewrites |
+| `Sources/NogrammerlyCore/WritingEngine.swift` | Spelling, grammar and style rules; merging suggestions (shared by Mac and iOS) |
+| `Sources/NogrammerlyCore/AIWriter.swift` | On-device Foundation Models proofreading and rewrites (shared by Mac and iOS) |
+| `Sources/NogrammerlyCore/ContextEdit.swift` | How the iOS keyboard applies a fix using only delete and type |
 | `Sources/Nogrammerly/SetupWindowController.swift` | First-run setup guide with live status |
 | `Sources/Nogrammerly/AppDelegate.swift` | App lifecycle, menus, built-in editor window |
 | `script/` | Build, signing, icon, and DMG scripts |
+| `iOS/App/` | iPhone and iPad editor app (SwiftUI) |
+| `iOS/Keyboard/` | The Nogrammerly keyboard extension: keys, suggestion chips, rewrite panel |
 | `windows/` | The Windows app ([details](windows/README.md#build-from-source)) |
 
 ## 🩺 Troubleshooting

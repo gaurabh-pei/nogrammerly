@@ -1,4 +1,5 @@
 import AppKit
+import NogrammerlyCore
 import ApplicationServices
 
 @main

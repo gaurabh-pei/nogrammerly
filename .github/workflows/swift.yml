@@ -20,3 +20,12 @@ jobs:
       run: swift build -v
     - name: Run tests
       run: swift test -v
+
+  ios:
+
+    runs-on: macos-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build iOS app and keyboard (simulator, unsigned)
+      run: xcodebuild -project iOS/Nogrammerly.xcodeproj -scheme NogrammerlyiOS -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
