@@ -3,11 +3,14 @@ import NogrammerlyCore
 
 @main
 struct NogrammerlyApp: App {
+    /// One document for the whole app, so iPad windows show the same text instead of overwriting each other.
+    @State private var model = EditorModel()
+
     var body: some Scene {
         WindowGroup {
             TabView {
                 Tab("Write", systemImage: "square.and.pencil") {
-                    NavigationStack { EditorScreen() }
+                    NavigationStack { EditorScreen(model: model) }
                 }
                 Tab("Keyboard", systemImage: "keyboard") {
                     NavigationStack { KeyboardSetupScreen() }

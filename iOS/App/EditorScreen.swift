@@ -3,7 +3,7 @@ import UIKit
 import NogrammerlyCore
 
 struct EditorScreen: View {
-    @State private var model = EditorModel()
+    @Bindable var model: EditorModel
     @State private var showsAllSuggestions = false
 
     var body: some View {

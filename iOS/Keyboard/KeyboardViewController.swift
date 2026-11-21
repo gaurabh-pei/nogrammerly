@@ -90,7 +90,11 @@ final class KeyboardViewController: UIInputViewController {
     /// Follows the host field's dark keyboard request, its return-key label and sentence capitalisation.
     private func syncWithHost() {
         let proxy = textDocumentProxy
-        view.overrideUserInterfaceStyle = proxy.keyboardAppearance == .dark ? .dark : .unspecified
+        view.overrideUserInterfaceStyle = switch proxy.keyboardAppearance {
+        case .dark: .dark
+        case .light: .light
+        default: .unspecified
+        }
         keys.returnTitle = switch proxy.returnKeyType {
         case .go: "go"
         case .search, .google, .yahoo: "search"
@@ -110,7 +114,7 @@ final class KeyboardViewController: UIInputViewController {
         switch action {
         case .insert(let character):
             proxy.insertText(character)
-            if shift == .on { setShift(.off) }
+            updateAutoCapitalization()
         case .delete:
             proxy.deleteBackward()
             updateAutoCapitalization()
@@ -150,11 +154,17 @@ final class KeyboardViewController: UIInputViewController {
 
     private func updateAutoCapitalization() {
         guard shift != .locked else { return }
-        let type = textDocumentProxy.autocapitalizationType ?? .sentences
-        guard type == .sentences || type == .allCharacters else { setShift(.off); return }
-        let text = before.trimmingCharacters(in: .whitespaces)
-        let startsSentence = text.isEmpty || before.hasSuffix("\n") || (before.hasSuffix(" ") && [".", "!", "?"].contains(text.last.map(String.init) ?? ""))
-        setShift(type == .allCharacters || startsSentence ? .on : .off)
+        let text = before
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        let startsWord = text.isEmpty || text.last?.isWhitespace == true
+        let startsSentence = trimmed.isEmpty || text.hasSuffix("\n") || (text.hasSuffix(" ") && [".", "!", "?"].contains(trimmed.last.map(String.init) ?? ""))
+        let capitalize = switch textDocumentProxy.autocapitalizationType ?? .sentences {
+        case .allCharacters: true
+        case .words: startsWord
+        case .sentences: startsSentence
+        default: false
+        }
+        setShift(capitalize ? .on : .off)
     }
 
     // MARK: Checking
@@ -180,6 +190,8 @@ final class KeyboardViewController: UIInputViewController {
     private static func checkWindow(of text: String) -> String {
         guard text.count > window else { return text }
         let tail = text.suffix(window)
+        // Start at a word boundary when there is one; text without spaces (e.g. Japanese) is kept whole.
+        guard tail.contains(where: \.isWhitespace) else { return String(tail) }
         return String(tail.drop { !$0.isWhitespace })
     }
 
@@ -212,7 +224,9 @@ final class KeyboardViewController: UIInputViewController {
 
     /// Rewrites the sentence holding `suggestion`, or everything before the cursor when nil.
     private func openRewrite(for suggestion: WritingSuggestion?) {
-        let context = Self.checkWindow(of: before)
+        // A suggestion's range refers to `checked`; if the text has changed since, re-check instead.
+        if suggestion != nil, !before.hasSuffix(checked) { scheduleCheck(); return }
+        let context = suggestion == nil ? Self.checkWindow(of: before) : checked
         guard context.contains(where: \.isLetter) else { return }
         let range = suggestion.map { WritingEngine.sentenceRange(containing: $0.range, in: context) }
             ?? NSRange(location: 0, length: (context as NSString).length)
