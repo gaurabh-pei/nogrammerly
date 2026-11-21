@@ -16,6 +16,8 @@ internal static class AIWriter
     private static readonly SemaphoreSlim Gate = new(1, 1);
     private static readonly Dictionary<string, IReadOnlyList<WritingSuggestion>> ParagraphCache = [];
     private static LanguageModel? model;
+    private sealed record Reading(Availability Value, long At);
+    private static volatile Reading? lastCheck;
 
     /// <summary>
     /// The Windows AI APIs only work for apps with package identity, which Install.ps1 provides;
@@ -23,9 +25,15 @@ internal static class AIWriter
     /// </summary>
     public static Availability Check()
     {
+        // Asked on every text change. The answer is remembered because asking is a cross-process call, and
+        // without package identity it throws every time. Missing identity or hardware can't change while we run.
+        var now = Environment.TickCount64;
+        if (lastCheck is { } last && (last.Value is Availability.NeedsInstall or Availability.Unsupported || now - last.At < 30_000))
+            return last.Value;
+        Availability value;
         try
         {
-            return LanguageModel.GetReadyState() switch
+            value = LanguageModel.GetReadyState() switch
             {
                 AIFeatureReadyState.Ready => Availability.Ready,
                 AIFeatureReadyState.NotReady => Availability.NeedsDownload,
@@ -35,8 +43,10 @@ internal static class AIWriter
         }
         catch (Exception)
         {
-            return Availability.NeedsInstall;
+            value = Availability.NeedsInstall;
         }
+        lastCheck = new Reading(value, now);
+        return value;
     }
 
     public static bool IsReady => Check() == Availability.Ready;
@@ -46,6 +56,7 @@ internal static class AIWriter
     {
         try { return (await LanguageModel.EnsureReadyAsync()).Status == AIFeatureReadyResultState.Success; }
         catch (Exception) { return false; }
+        finally { lastCheck = null; }
     }
 
     /// <summary>Proofreads paragraph by paragraph; unchanged paragraphs come from cache, so typing only re-checks the edited one.</summary>
@@ -62,7 +73,9 @@ internal static class AIWriter
             {
                 var reply = await GenerateAsync(Proofreading.ProofreadPrompt(paragraph));
                 if (token.IsCancellationRequested) return [];
-                local = reply is null ? [] : Proofreading.ParseIssues(reply, paragraph);
+                // A failed call is not an answer: leave the paragraph uncached so the next check tries again.
+                if (reply is null) continue;
+                local = Proofreading.ParseIssues(reply, paragraph);
                 lock (ParagraphCache)
                 {
                     if (ParagraphCache.Count > 500) ParagraphCache.Clear();

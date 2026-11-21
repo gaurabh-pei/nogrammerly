@@ -12,7 +12,9 @@ namespace Nogrammerly;
 internal sealed class TrayApp : ApplicationContext
 {
     private readonly SynchronizationContext ui = SynchronizationContext.Current!;
-    private readonly SystemWritingAssistant assistant = new();
+    private static readonly string DataFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Nogrammerly");
+    private readonly IgnoreList ignored = new(Path.Combine(DataFolder, "ignored.json"));
+    private readonly SystemWritingAssistant assistant;
     private readonly NotifyIcon tray = new();
     private readonly UnderlineOverlay overlay = new();
     private readonly FieldButton fieldButton;
@@ -24,6 +26,7 @@ internal sealed class TrayApp : ApplicationContext
 
     public TrayApp(bool firstRun)
     {
+        assistant = new SystemWritingAssistant(ignored);
         fieldButton = new FieldButton(() => ShowMenu(BuildFieldMenu()));
         tray.Icon = Icon.ExtractAssociatedIcon(Environment.ProcessPath!) ?? SystemIcons.Application;
         tray.Text = "Nogrammerly";
