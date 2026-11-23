@@ -90,11 +90,13 @@ final class KeyboardViewController: UIInputViewController {
     /// Follows the host field's dark keyboard request, its return-key label and sentence capitalisation.
     private func syncWithHost() {
         let proxy = textDocumentProxy
-        view.overrideUserInterfaceStyle = switch proxy.keyboardAppearance {
+        let style: UIUserInterfaceStyle = switch proxy.keyboardAppearance {
         case .dark: .dark
         case .light: .light
         default: .unspecified
         }
+        // Runs on every keystroke; re-setting the style would redo the trait pass each time.
+        if view.overrideUserInterfaceStyle != style { view.overrideUserInterfaceStyle = style }
         keys.returnTitle = switch proxy.returnKeyType {
         case .go: "go"
         case .search, .google, .yahoo: "search"

@@ -20,12 +20,15 @@ final class KeysView: UIView {
     weak var inputController: UIInputViewController?
 
     var page: KeyPage = .letters { didSet { if page != oldValue { rebuild() } } }
-    var shift: ShiftState = .off { didSet { if shift != oldValue { rebuild() } } }
+    /// Shift only relabels the keys: rebuilding them would drop a key the user is already pressing.
+    var shift: ShiftState = .off { didSet { if shift != oldValue { applyShift() } } }
     var showsGlobe = false { didSet { if showsGlobe != oldValue { rebuild() } } }
     var returnTitle = "return" { didSet { if returnTitle != oldValue { rebuild() } } }
 
     private let rows = UIStackView()
     private var deleteTimer: Timer?
+    private var characterKeys: [(button: UIButton, character: String)] = []
+    private weak var shiftKey: UIButton?
 
     static let letterKeyColor = UIColor { $0.userInterfaceStyle == .dark ? UIColor(white: 0.42, alpha: 1) : .white }
     static let functionKeyColor = UIColor { $0.userInterfaceStyle == .dark ? UIColor(white: 0.26, alpha: 1) : UIColor(red: 0.68, green: 0.70, blue: 0.74, alpha: 1) }
@@ -59,6 +62,7 @@ final class KeysView: UIView {
 
     private func rebuild() {
         rows.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        characterKeys = []
         let characters = characterRows
         // Every character key has the width of a top-row key, so rows with fewer keys get centred.
         let top = characters[0].map { characterKey(String($0)) }
@@ -71,7 +75,7 @@ final class KeysView: UIView {
         rows.addArrangedSubview(row(middle.count < top.count ? [spacer()] + middle + [spacer()] : middle, equalSpacers: true))
 
         let modifier: UIButton = switch page {
-        case .letters: functionKey(image: shift == .off ? "shift" : shift == .on ? "shift.fill" : "capslock.fill", label: "Shift") { [weak self] in self?.onAction?(.shift) }
+        case .letters: functionKey(image: shiftImage, label: "Shift") { [weak self] in self?.onAction?(.shift) }
         case .numbers: functionKey(title: "#+=") { [weak self] in self?.onAction?(.page(.symbols)) }
         case .symbols: functionKey(title: "123") { [weak self] in self?.onAction?(.page(.numbers)) }
         }
@@ -79,6 +83,7 @@ final class KeysView: UIView {
         delete.addTarget(self, action: #selector(deleteDown), for: .touchDown)
         delete.addTarget(self, action: #selector(deleteUp), for: [.touchUpInside, .touchUpOutside, .touchCancel])
         let sides = [modifier.widthAnchor.constraint(equalTo: reference.widthAnchor, multiplier: 1.4), delete.widthAnchor.constraint(equalTo: modifier.widthAnchor)]
+        shiftKey = page == .letters ? modifier : nil
         rows.addArrangedSubview(row([modifier, spacer()] + bottom + [spacer(), delete], equalSpacers: true))
 
         let pageKey = functionKey(title: page == .letters ? "123" : "ABC") { [weak self] in
@@ -93,7 +98,8 @@ final class KeysView: UIView {
             last.append(globe)
             widths.append(globe.widthAnchor.constraint(equalTo: pageKey.widthAnchor))
         }
-        let space = key(title: "space", background: Self.letterKeyColor, font: .systemFont(ofSize: 16)) { [weak self] in self?.onAction?(.space) }
+        let space = key(title: "space", background: Self.letterKeyColor, font: .systemFont(ofSize: 16), action: nil)
+        space.addAction(UIAction { [weak self] _ in self?.onAction?(.space) }, for: .touchDown)
         space.accessibilityLabel = "Space"
         let enter = functionKey(title: returnTitle) { [weak self] in self?.onAction?(.newline) }
         widths.append(enter.widthAnchor.constraint(equalTo: reference.widthAnchor, multiplier: 2.4))
@@ -122,9 +128,28 @@ final class KeysView: UIView {
         return view
     }
 
+    private var shiftImage: String { shift == .off ? "shift" : shift == .on ? "shift.fill" : "capslock.fill" }
+
+    private func shown(_ character: String) -> String {
+        page == .letters && shift != .off ? character.uppercased() : character
+    }
+
+    /// Character keys type on touch-down, so fast overlapping taps are never lost.
     private func characterKey(_ character: String) -> UIButton {
-        let shown = page == .letters && shift != .off ? character.uppercased() : character
-        return key(title: shown, background: Self.letterKeyColor, font: .systemFont(ofSize: 23)) { [weak self] in self?.onAction?(.insert(shown)) }
+        let button = key(title: shown(character), background: Self.letterKeyColor, font: .systemFont(ofSize: 23), action: nil)
+        button.addAction(UIAction { [weak self] _ in
+            guard let self else { return }
+            self.onAction?(.insert(self.shown(character)))
+        }, for: .touchDown)
+        characterKeys.append((button, character))
+        return button
+    }
+
+    private func applyShift() {
+        for (button, character) in characterKeys {
+            button.configuration?.attributedTitle = AttributedString(shown(character), attributes: AttributeContainer([.font: UIFont.systemFont(ofSize: 23)]))
+        }
+        shiftKey?.configuration?.image = UIImage(systemName: shiftImage, withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .regular))
     }
 
     private func functionKey(title: String, action: @escaping () -> Void) -> UIButton {

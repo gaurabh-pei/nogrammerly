@@ -28,6 +28,8 @@ final class SuggestionBar: UIView {
         chips.spacing = 8
         chips.alignment = .center
         scroll.showsHorizontalScrollIndicator = false
+        // iOS 26+ blurs a scroll view's edges; in a 44pt strip that blur covers the chips entirely.
+        for edge in [scroll.topEdgeEffect, scroll.bottomEdgeEffect, scroll.leftEdgeEffect, scroll.rightEdgeEffect] { edge.isHidden = true }
         scroll.addSubview(chips)
         chips.translatesAutoresizingMaskIntoConstraints = false
 
