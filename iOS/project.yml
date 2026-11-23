@@ -29,6 +29,8 @@ targets:
     info:
       path: App/Info.plist
       properties:
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         CFBundleDisplayName: Nogrammerly
         UILaunchScreen: {}
         ITSAppUsesNonExemptEncryption: false
@@ -49,6 +51,8 @@ targets:
     info:
       path: Keyboard/Info.plist
       properties:
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         CFBundleDisplayName: Nogrammerly
         NSExtension:
           NSExtensionPointIdentifier: com.apple.keyboard-service
