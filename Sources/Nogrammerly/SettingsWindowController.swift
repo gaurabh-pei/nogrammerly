@@ -173,9 +173,10 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
         let relaunch = Process()
         relaunch.executableURL = URL(fileURLWithPath: "/bin/sh")
+        // Use absolute paths for external commands so relaunch does not depend on the inherited PATH.
         relaunch.arguments = [
             "-c",
-            "while kill -0 \"$1\" 2>/dev/null; do sleep 0.1; done; exec /usr/bin/open \"$2\"",
+            "while kill -0 \"$1\" 2>/dev/null; do /bin/sleep 0.1; done; exec /usr/bin/open \"$2\"",
             "sh",
             String(ProcessInfo.processInfo.processIdentifier),
             bundleURL.path
