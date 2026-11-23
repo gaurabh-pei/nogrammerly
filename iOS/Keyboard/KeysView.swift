@@ -75,7 +75,7 @@ final class KeysView: UIView {
         rows.addArrangedSubview(row(middle.count < top.count ? [spacer()] + middle + [spacer()] : middle, equalSpacers: true))
 
         let modifier: UIButton = switch page {
-        case .letters: functionKey(image: shiftImage, label: "Shift") { [weak self] in self?.onAction?(.shift) }
+        case .letters: functionKey(image: shiftImage, label: "Shift", action: nil, downAction: { [weak self] in self?.onAction?(.shift) })
         case .numbers: functionKey(title: "#+=") { [weak self] in self?.onAction?(.page(.symbols)) }
         case .symbols: functionKey(title: "123") { [weak self] in self?.onAction?(.page(.numbers)) }
         }
@@ -94,6 +94,7 @@ final class KeysView: UIView {
         var widths = [pageKey.widthAnchor.constraint(equalTo: reference.widthAnchor, multiplier: 1.4)]
         if showsGlobe {
             let globe = functionKey(image: "globe", label: "Next keyboard", action: nil)
+            (globe as? KeyButton)?.replaysTouchDown = false
             globe.addTarget(inputController, action: #selector(UIInputViewController.handleInputModeList(from:with:)), for: .allTouchEvents)
             last.append(globe)
             widths.append(globe.widthAnchor.constraint(equalTo: pageKey.widthAnchor))
@@ -156,8 +157,10 @@ final class KeysView: UIView {
         key(title: title, background: Self.functionKeyColor, font: .systemFont(ofSize: 16), action: action)
     }
 
-    private func functionKey(image: String, label: String, action: (() -> Void)?) -> UIButton {
+    /// `downAction` fires on touch-down, e.g. Shift, so holding it while pressing a letter types a capital.
+    private func functionKey(image: String, label: String, action: (() -> Void)?, downAction: (() -> Void)? = nil) -> UIButton {
         let button = key(title: nil, background: Self.functionKeyColor, font: .systemFont(ofSize: 16), action: action)
+        if let downAction { button.addAction(UIAction { _ in downAction() }, for: .touchDown) }
         button.configuration?.image = UIImage(systemName: image, withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .regular))
         button.accessibilityLabel = label
         return button
@@ -171,7 +174,7 @@ final class KeysView: UIView {
         if let title {
             configuration.attributedTitle = AttributedString(title, attributes: AttributeContainer([.font: font]))
         }
-        let button = UIButton(configuration: configuration)
+        let button = KeyButton(configuration: configuration)
         button.configurationUpdateHandler = { button in
             button.configuration?.background.backgroundColor = button.isHighlighted ? Self.pressedKeyColor : background
         }
@@ -200,5 +203,17 @@ final class KeysView: UIView {
     @objc private func deleteUp() {
         deleteTimer?.invalidate()
         deleteTimer = nil
+    }
+}
+
+/// Keys that type on touch-down. VoiceOver activation sends only a tap, so replay it as touch-down too.
+private final class KeyButton: UIButton {
+    /// Off for the globe key, which already handles every touch event itself.
+    var replaysTouchDown = true
+
+    override func accessibilityActivate() -> Bool {
+        if replaysTouchDown { sendActions(for: .touchDown) }
+        sendActions(for: .touchUpInside)
+        return true
     }
 }
