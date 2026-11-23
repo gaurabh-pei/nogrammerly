@@ -70,6 +70,8 @@ struct EditorScreen: View {
                     .padding(.vertical, 10)
                 }
                 .scrollIndicators(.hidden)
+                // The iOS 26+ edge blur would cover the cards in this short strip.
+                .scrollEdgeEffectHidden(true, for: .all)
             }
         }
         .background(.bar)

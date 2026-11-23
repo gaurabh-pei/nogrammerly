@@ -23,6 +23,7 @@ final class RewritePanel: UIView {
         }, for: .valueChanged)
 
         text.isEditable = false
+        for edge in [text.topEdgeEffect, text.bottomEdgeEffect, text.leftEdgeEffect, text.rightEdgeEffect] { edge.isHidden = true }
         text.font = .systemFont(ofSize: 15)
         text.textColor = .label
         text.backgroundColor = .secondarySystemBackground
