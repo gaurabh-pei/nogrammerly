@@ -31,8 +31,10 @@ final class SystemWritingAssistant: NSObject, NSMenuDelegate {
     var onStateChange: ((String) -> Void)?
     var onOpenApp: (() -> Void)?
     var onOpenSetup: (() -> Void)?
+    var onOpenSettings: (() -> Void)?
 
     var isRunning: Bool { pollTimer != nil }
+    var isWaitingForAccessibility: Bool { permissionTimer != nil }
 
     override init() {
         super.init()
@@ -46,16 +48,15 @@ final class SystemWritingAssistant: NSObject, NSMenuDelegate {
     func start() {
         guard !isRunning else { return }
         let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+        permissionTimer?.invalidate(); permissionTimer = nil
         guard AXIsProcessTrustedWithOptions(options) else {
-            report("Waiting for Accessibility access: System Settings › Privacy & Security › Accessibility. If Nogrammerly is already listed, remove it with − and add it again.")
-            permissionTimer?.invalidate()
             permissionTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated {
                     guard let self, AXIsProcessTrusted() else { return }
-                    self.permissionTimer?.invalidate(); self.permissionTimer = nil
                     self.start()
                 }
             }
+            report("Waiting for Accessibility access: System Settings › Privacy & Security › Accessibility. If Nogrammerly is already listed, remove it with − and add it again.")
             return
         }
         installRightClickTap()
@@ -302,7 +303,12 @@ final class SystemWritingAssistant: NSObject, NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
         menu.autoenablesItems = false
-        let state = menu.addItem(withTitle: isRunning ? (element == nil ? "Watching for a text field…" : "\(suggestions.count) suggestion\(suggestions.count == 1 ? "" : "s") in this field") : "Everywhere mode is off", action: nil, keyEquivalent: "")
+        let status: String
+        if isWaitingForAccessibility { status = "Waiting for Accessibility permission…" }
+        else if !isRunning { status = "Everywhere mode is off" }
+        else if element == nil { status = "Watching for a text field…" }
+        else { status = "\(suggestions.count) suggestion\(suggestions.count == 1 ? "" : "s") in this field" }
+        let state = menu.addItem(withTitle: status, action: nil, keyEquivalent: "")
         state.isEnabled = false
         if !AIWriter.isAvailable {
             let note = menu.addItem(withTitle: "Turn on Apple Intelligence for AI grammar and rewrites", action: nil, keyEquivalent: "")
@@ -313,12 +319,15 @@ final class SystemWritingAssistant: NSObject, NSMenuDelegate {
             addFieldItems(to: menu)
         }
         menu.addItem(.separator())
-        let toggle = menu.addItem(withTitle: isRunning ? "Pause everywhere mode" : "Enable everywhere", action: #selector(toggle), keyEquivalent: "")
+        let toggleTitle = isWaitingForAccessibility ? "Cancel enabling everywhere mode" : (isRunning ? "Pause everywhere mode" : "Enable everywhere")
+        let toggle = menu.addItem(withTitle: toggleTitle, action: #selector(toggleEverywhereMode), keyEquivalent: "")
         toggle.target = self
         let login = menu.addItem(withTitle: "Launch at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
         login.target = self; login.state = LaunchAtLogin.isEnabled ? .on : .off
         let open = menu.addItem(withTitle: "Open Nogrammerly", action: #selector(openApp), keyEquivalent: "")
         open.target = self
+        let settings = menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
+        settings.target = self
         let setup = menu.addItem(withTitle: "Setup Guide…", action: #selector(openSetup), keyEquivalent: "")
         setup.target = self
         let quit = menu.addItem(withTitle: "Quit Nogrammerly", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -357,8 +366,12 @@ final class SystemWritingAssistant: NSObject, NSMenuDelegate {
         menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
     }
 
-    @objc private func toggle() { isRunning ? stop() : start() }
+    @objc func toggleEverywhereMode() {
+        if isRunning || isWaitingForAccessibility { stop() }
+        else { start() }
+    }
     @objc private func openApp() { onOpenApp?() }
+    @objc private func openSettings() { onOpenSettings?() }
     @objc private func toggleLaunchAtLogin() { if let message = LaunchAtLogin.toggle() { report(message) } }
     @objc private func openSetup() { onOpenSetup?() }
 

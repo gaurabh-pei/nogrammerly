@@ -125,6 +125,15 @@ iOS doesn't let apps draw over other apps, so on iPhone and iPad Nogrammerly is 
 | 🧠 AI checks & rewrites | macOS 26+ with Apple Intelligence turned on. Without it you still get spelling, grammar and style checks. |
 | 🔑 Permission | Accessibility (System Settings › Privacy & Security › Accessibility) |
 
+Open **Settings…** from the editor sidebar or the ✦ menu-bar icon. When the Nogrammerly application menu is available, you can also press `⌘,`.
+
+- Turn **Launch at Login** on or off. macOS may ask you to approve it in Login Items.
+- Turn **Everywhere mode** on or off for checks in supported apps.
+- Check Accessibility and Apple Intelligence status and open their System Settings pages.
+- Show or hide Nogrammerly in the Dock and Command-Tab switcher.
+
+Nogrammerly appears in the Dock and Command-Tab by default. The ✦ menu-bar icon remains available when you hide the Dock icon, and the editor still opens on launch. Select **Quit and Reopen** to apply the Dock setting now and discard the current editor text, or **Later** to apply it on your next launch.
+
 ### 🪟 Windows (beta)
 
 1. Download the zip for your PC. The download starts straight away.

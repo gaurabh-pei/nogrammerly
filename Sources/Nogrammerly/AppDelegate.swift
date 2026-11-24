@@ -11,13 +11,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource,
     private let scoreLabel = NSTextField(labelWithString: "")
     private let statusLabel = NSTextField(labelWithString: "")
     private let rewriteButton = NSButton()
-    private let everywhereButton = NSButton(title: "", target: nil, action: nil)
-    private let everywhereStatus = NSTextField(labelWithString: "")
+    private let settingsButton = NSButton(title: "Settings…", target: nil, action: nil)
     private let toneControl = NSSegmentedControl(labels: WritingTone.allCases.map(\.rawValue), trackingMode: .selectOne, target: nil, action: nil)
     private var suggestions: [WritingSuggestion] = []
     private var proofreadTask: Task<Void, Never>?
     private let systemAssistant = SystemWritingAssistant()
     private lazy var setup = SetupWindowController(assistant: systemAssistant)
+    private var settings: SettingsWindowController?
 
     static func main() {
         let app = NSApplication.shared
@@ -27,7 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource,
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.regular)
+        NSApp.setActivationPolicy(AppPreferences().activationPolicy)
         NSApp.mainMenu = makeMainMenu()
         AIWriter.prewarm()
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1220, height: 780), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
@@ -40,10 +40,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource,
         editor.string = "Hello team,\n\nI wanted to recieve your feedback on the proposal. We utilize the new workflow in order to make our approvals faster, and I think it will be very helpful!!\n\nThank you"
         systemAssistant.onStateChange = { [weak self] message in
             self?.statusLabel.stringValue = message
-            self?.updateEverywhereControls()
+            self?.settings?.refresh()
         }
         systemAssistant.onOpenApp = { [weak self] in self?.showWindow() }
         systemAssistant.onOpenSetup = { [weak self] in self?.showSetup() }
+        systemAssistant.onOpenSettings = { [weak self] in self?.showSettings() }
         if AXIsProcessTrusted() {
             systemAssistant.start()
         } else {
@@ -78,13 +79,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource,
         let panel = FillView(color: .controlBackgroundColor)
         let logo = NSTextField(labelWithString: "✦  Nogrammerly"); logo.font = .systemFont(ofSize: 17, weight: .bold); logo.textColor = .systemIndigo
         let newDoc = NSButton(title: "+  New document", target: self, action: #selector(newDocument)); newDoc.bezelColor = .systemIndigo
-        everywhereStatus.font = .systemFont(ofSize: 12, weight: .semibold)
-        everywhereButton.target = self; everywhereButton.action = #selector(everywhereButtonClicked); everywhereButton.bezelColor = .systemIndigo
-        updateEverywhereControls()
+        settingsButton.target = self; settingsButton.action = #selector(showSettings)
         let engine = NSTextField(wrappingLabelWithString: AIWriter.isAvailable ? "✦  AI checks: Apple on-device model" : "✦  AI checks off: turn on Apple Intelligence in System Settings for grammar, tone and rewrites."); engine.textColor = .secondaryLabelColor; engine.font = .systemFont(ofSize: 12)
         let privacy = NSTextField(wrappingLabelWithString: "◎  Everywhere mode checks your writing in Slack, Notes, Zoom and most other apps. Click the round button in the corner of the field you're typing in, or right-click an underline. Your text stays on this Mac."); privacy.textColor = .secondaryLabelColor; privacy.font = .systemFont(ofSize: 12)
-        let stack = NSStackView(views: [logo, newDoc, NSView(), everywhereStatus, everywhereButton, engine, privacy]); stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 16; stack.translatesAutoresizingMaskIntoConstraints = false
-        panel.addSubview(stack); NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo: panel.leadingAnchor, constant: 18), stack.trailingAnchor.constraint(equalTo: panel.trailingAnchor, constant: -18), stack.topAnchor.constraint(equalTo: panel.topAnchor, constant: 22), stack.bottomAnchor.constraint(equalTo: panel.bottomAnchor, constant: -22), newDoc.widthAnchor.constraint(equalTo: stack.widthAnchor), everywhereButton.widthAnchor.constraint(equalTo: stack.widthAnchor), privacy.widthAnchor.constraint(equalTo: stack.widthAnchor)])
+        let stack = NSStackView(views: [logo, newDoc, NSView(), settingsButton, engine, privacy]); stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 16; stack.translatesAutoresizingMaskIntoConstraints = false
+        panel.addSubview(stack); NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo: panel.leadingAnchor, constant: 18), stack.trailingAnchor.constraint(equalTo: panel.trailingAnchor, constant: -18), stack.topAnchor.constraint(equalTo: panel.topAnchor, constant: 22), stack.bottomAnchor.constraint(equalTo: panel.bottomAnchor, constant: -22), newDoc.widthAnchor.constraint(equalTo: stack.widthAnchor), settingsButton.widthAnchor.constraint(equalTo: stack.widthAnchor), privacy.widthAnchor.constraint(equalTo: stack.widthAnchor)])
         return panel
     }
 
@@ -148,28 +147,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource,
     func textDidChange(_ notification: Notification) { refreshAnalysis() }
 
     @objc private func newDocument() { editor.string = ""; refreshAnalysis() }
-    /// The sidebar control mirrors everywhere mode: set up permissions, turn it on, or pause it.
-    private func updateEverywhereControls() {
-        if !AXIsProcessTrusted() {
-            everywhereStatus.stringValue = "●  Everywhere mode: needs permission"; everywhereStatus.textColor = .systemOrange
-            everywhereButton.title = "Set Up Permissions…"
-        } else if systemAssistant.isRunning {
-            everywhereStatus.stringValue = "●  Everywhere mode: on"; everywhereStatus.textColor = .systemGreen
-            everywhereButton.title = "Pause Everywhere Mode"
-        } else {
-            everywhereStatus.stringValue = "●  Everywhere mode: paused"; everywhereStatus.textColor = .secondaryLabelColor
-            everywhereButton.title = "Turn On Everywhere Mode"
-        }
-    }
-
-    @objc private func everywhereButtonClicked() {
-        if !AXIsProcessTrusted() { systemAssistant.start(); showSetup() }
-        else if systemAssistant.isRunning { systemAssistant.stop() }
-        else { systemAssistant.start() }
-        updateEverywhereControls()
-    }
 
     @objc private func showSetup() { setup.present() }
+
+    @objc private func showSettings() {
+        let controller = settings ?? SettingsWindowController(assistant: systemAssistant)
+        settings = controller
+        controller.present()
+    }
 
     @objc private func toggleLaunchAtLogin() { if let message = LaunchAtLogin.toggle() { statusLabel.stringValue = message } }
 
@@ -195,6 +180,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource,
         }
         submenu("Nogrammerly", [
             item("About Nogrammerly", #selector(NSApplication.orderFrontStandardAboutPanel(_:))),
+            item("Settings…", #selector(showSettings), ",", target: self),
             item("Setup Guide…", #selector(showSetup), target: self),
             item("Launch at Login", #selector(toggleLaunchAtLogin), target: self),
             .separator(),
