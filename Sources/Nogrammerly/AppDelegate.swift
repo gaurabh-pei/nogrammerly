@@ -131,6 +131,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource,
     func tableViewSelectionDidChange(_ notification: Notification) {
         let row = suggestionTable.selectedRow
         guard row >= 0 else { return }
+        // A click on the row that is still selected is not a selection change, so clear it; otherwise the suggestion
+        // that moves into this row after an apply (and reloadData) can't be clicked. The nested call sees row -1.
+        defer { suggestionTable.deselectAll(nil) }
         let suggestion = suggestions[row]
         let nsText = editor.string as NSString
         guard NSMaxRange(suggestion.range) <= nsText.length, nsText.substring(with: suggestion.range) == suggestion.original else { refreshAnalysis(); return }
