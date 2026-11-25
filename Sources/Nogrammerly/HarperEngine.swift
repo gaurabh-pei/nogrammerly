@@ -49,6 +49,8 @@ final class HarperEngine: @unchecked Sendable {
     static let statusDidChange = Notification.Name("HarperEngineStatusDidChange")
     /// Posted when the sidecar becomes ready, so fields analysed with the Apple fallback meanwhile can be re-checked.
     static let didBecomeReady = Notification.Name("HarperEngineDidBecomeReady")
+    /// Posted when a background `catchUp(_:)` lint has finished and cached its chunks, so the field can be checked again.
+    static let didCatchUp = Notification.Name("HarperEngineDidCatchUp")
     private static let statusLock = NSLock()
     /// Notifications go out from here, never from the thread that changed state: a queue-bound observer makes
     /// `post` wait for it, and that thread may hold `lintLock` while the main thread is waiting for the lock.
@@ -176,6 +178,12 @@ final class HarperEngine: @unchecked Sendable {
     private var starting = false
     /// Serial: keeps frames in order and keeps every caller off the pipe (a full pipe blocks the writer, not them).
     private let writeQueue = DispatchQueue(label: "nogrammerly.harper.write")
+    /// Serial: runs `catchUp(_:)` lints off the main thread.
+    private let catchUpQueue = DispatchQueue(label: "nogrammerly.harper.catchup", qos: .userInitiated)
+    private var pendingCatchUp: String?
+    /// The text the most recent catch-up ran on. Unchanged text is not caught up twice, so a chunk that never
+    /// completes cannot keep the re-check loop going.
+    private var lastCatchUp: String?
 
     // Serializes lint calls and owns the fields below.
     private let lintLock = NSLock()
@@ -185,7 +193,9 @@ final class HarperEngine: @unchecked Sendable {
 
     var isRunning: Bool { state.lock(); defer { state.unlock() }; return process?.isRunning == true && ready }
     /// Whether the most recent lint() call answered (false when it fell back). For tests and the benchmark.
-    private(set) var lastLintSucceeded = false
+    private var _lastLintSucceeded = false
+    var lastLintSucceeded: Bool { state.lock(); defer { state.unlock() }; return _lastLintSucceeded }
+    private func setLastLintSucceeded(_ value: Bool) { state.lock(); _lastLintSucceeded = value; state.unlock() }
     var processIdentifier: Int32? { state.lock(); defer { state.unlock() }; return process?.processIdentifier }
 
     // MARK: Lifecycle
@@ -300,12 +310,14 @@ final class HarperEngine: @unchecked Sendable {
     /// Lints `text` and returns suggestions with ranges in `text`, or nil when Harper is starting, stopped or
     /// missed `deadline` (the caller then falls back to the Apple checker for this pass). Never spawns the
     /// sidecar itself and never waits for a start in progress, so a main-thread caller is not held up by one.
-    func lint(_ text: String, deadline: Date = Date(timeIntervalSinceNow: 1)) -> [WritingSuggestion]? {
-        lastLintSucceeded = false
+    /// `waitForLock` false returns nil at once when another lint holds the engine (the main-thread path: a
+    /// `catchUp(_:)` lint may be running), and a miss then leaves the status line alone, since a catch-up follows.
+    func lint(_ text: String, deadline: Date = Date(timeIntervalSinceNow: 1), waitForLock: Bool = true) -> [WritingSuggestion]? {
+        setLastLintSucceeded(false)
         // Take the lock without ever waiting behind a start: poll it, and give up as soon as a start is flagged.
         while !lintLock.try() {
             state.lock(); let busyStarting = starting; state.unlock()
-            if busyStarting { return nil }
+            if busyStarting || !waitForLock { return nil }
             if Date() >= deadline {
                 Self.status = "Checks: Apple spelling and grammar for now. Harper was busy."
                 return nil
@@ -323,21 +335,44 @@ final class HarperEngine: @unchecked Sendable {
             if let cached = cache[chunk] {
                 found = cached
             } else {
-                guard let fresh = lintChunk(chunk, deadline: deadline) else { return nil }
+                guard let fresh = lintChunk(chunk, deadline: deadline, reportMiss: waitForLock) else { return nil }
                 // A chunk whose fixes missed the deadline is shown as is but not cached, so the next pass retries it.
                 if fresh.complete { remember(fresh.suggestions, for: chunk) }
                 found = fresh.suggestions
             }
             results += found.map { $0.shifted(by: chunkRange.location) }
         }
-        lastLintSucceeded = true
+        setLastLintSucceeded(true)
         if isRunning { Self.status = Self.selection.reason } // never paper over a stop reported meanwhile
         return results
     }
 
+    static let catchUpBudget: TimeInterval = 10
+
+    /// Finishes a lint that missed a short deadline, off the calling thread. Nobody waits on it, so it gets
+    /// `catchUpBudget` rather than 1 s (a dense 20,000-character paste takes about 1.8 s). Completed chunks are cached,
+    /// so the next pass over the same text answers from the cache; posts `didCatchUp` when done.
+    /// Calls made while one is queued replace its text, so only the latest field contents are linted, and text that
+    /// was already caught up is not queued again.
+    func catchUp(_ text: String) {
+        guard isRunning else { return }
+        state.lock()
+        let repeated = text == lastCatchUp
+        let queued = pendingCatchUp != nil
+        if !repeated { pendingCatchUp = text }
+        state.unlock()
+        guard !repeated, !queued else { return }
+        catchUpQueue.async { [weak self] in
+            guard let self else { return }
+            self.state.lock(); let latest = self.pendingCatchUp; self.pendingCatchUp = nil; self.lastCatchUp = latest; self.state.unlock()
+            guard let latest, self.lint(latest, deadline: Date(timeIntervalSinceNow: Self.catchUpBudget)) != nil else { return }
+            Self.post(Self.didCatchUp, object: self)
+        }
+    }
+
     /// Sends one chunk as its own document, waits for its diagnostics, then fetches the fixes. `complete` is false when
     /// some fixes missed the deadline (those suggestions have no replacement).
-    private func lintChunk(_ text: String, deadline: Date) -> (suggestions: [WritingSuggestion], complete: Bool)? {
+    private func lintChunk(_ text: String, deadline: Date, reportMiss: Bool = true) -> (suggestions: [WritingSuggestion], complete: Bool)? {
         retireDocument()
         let waiter = Waiter()
         state.lock(); diagnosticsWaiter = waiter; let uri = currentURI; state.unlock()
@@ -346,7 +381,7 @@ final class HarperEngine: @unchecked Sendable {
         guard waiter.semaphore.wait(timeout: .now() + max(0, deadline.timeIntervalSinceNow)) == .success,
               let diagnostics = waiter.value as? [[String: Any]] else {
             retireDocument() // a late answer will name this URI and be dropped
-            Self.status = "Checks: Apple spelling and grammar for now. Harper did not answer in time."
+            if reportMiss { Self.status = "Checks: Apple spelling and grammar for now. Harper did not answer in time." }
             return nil
         }
         // Pipeline every code-action request, then collect; a fix that misses the deadline only loses its replacement.

@@ -8,14 +8,25 @@ enum MacWritingEngine {
     private static let appleSecondary = ProcessInfo.processInfo.environment["NOGRAMMERLY_APPLE_SECONDARY"] == "1"
         || UserDefaults.standard.bool(forKey: "NogrammerlyAppleSecondary")
 
+    /// How long the main thread waits for Harper. A warm keystroke takes about 14 ms; a pass that needs longer (a
+    /// large paste, every chunk new) shows the Apple checker's results at once and Harper finishes in the background.
+    static let mainThreadBudget: TimeInterval = 0.15
+
+    /// The main-thread entry point (the editor and Everywhere mode poll): waits at most `mainThreadBudget`.
     static func analyze(_ text: String) -> WritingAnalysis {
-        analyze(text, harper: HarperEngine.shared)
+        analyze(text, harper: HarperEngine.shared, budget: mainThreadBudget)
     }
 
     /// `harper` nil means the Apple checker (NOGRAMMERLY_ENGINE=apple, or harper-ls not bundled). A lint that
-    /// fails or is not ready also falls back to the Apple checker.
-    static func analyze(_ text: String, harper: HarperEngine?) -> WritingAnalysis {
-        guard let harper, let found = harper.lint(text) else { return WritingEngine.analyze(text) }
+    /// fails or is not ready also falls back to the Apple checker. With a `budget`, a lint that misses it (or finds
+    /// another lint running) falls back at once and hands the text to `catchUp(_:)`; without one it waits up to 1 s.
+    static func analyze(_ text: String, harper: HarperEngine?, budget: TimeInterval? = nil) -> WritingAnalysis {
+        guard let harper else { return WritingEngine.analyze(text) }
+        let found = budget.map { harper.lint(text, deadline: Date(timeIntervalSinceNow: $0), waitForLock: false) } ?? harper.lint(text)
+        guard let found else {
+            if budget != nil { harper.catchUp(text) }
+            return WritingEngine.analyze(text)
+        }
         // Harper is primary; the local phrase rules fill in what it does not cover ("utilize", "I think").
         // NOGRAMMERLY_APPLE_SECONDARY=1 also merges the Apple checker behind both.
         return WritingEngine.analyze(text, primary: preferAppleCorrections(found, in: text), systemChecker: appleSecondary)
