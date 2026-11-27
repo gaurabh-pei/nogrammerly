@@ -200,7 +200,7 @@ swift test                           # run the engine and app tests (also run by
 
 #### Optional: Harper checker
 
-[Harper](https://github.com/Automattic/harper) (Apache-2.0) is an open-source grammar checker that runs entirely on your Mac. Building with it bundles the pinned `harper-ls` release (about 59 MB) as a helper. Harper then replaces Apple's spelling and grammar checker as the main source of underlines, and Nogrammerly's own phrase rules and the on-device AI keep running as before.
+[Harper](https://github.com/Automattic/harper) (Apache-2.0) is an open-source grammar checker that runs entirely on your Mac. Building with it bundles the pinned `harper-ls` release (about 59 MB) as a helper. The pinned build is Apple Silicon only (`aarch64-apple-darwin`), so bundle it on and for Apple Silicon Macs; on an Intel Mac, build without it and the app uses Apple's checker as before. Harper then replaces Apple's spelling and grammar checker as the main source of underlines, and Nogrammerly's own phrase rules and the on-device AI keep running as before.
 
 ```bash
 NOGRAMMERLY_BUNDLE_HARPER=1 ./script/build_and_run.sh   # downloads and verifies harper-ls, then bundles it

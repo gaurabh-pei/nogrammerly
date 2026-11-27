@@ -35,11 +35,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource,
         NotificationCenter.default.addObserver(forName: HarperEngine.statusDidChange, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.checkerStatus.stringValue = "✦  " + HarperEngine.status }
         }
-        // Whatever was checked with the Apple fallback while Harper started, or while a slow pass finished in the
-        // background, gets checked again by Harper.
-        for name in [HarperEngine.didBecomeReady, HarperEngine.didCatchUp] {
-            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.refreshAnalysis(); self?.systemAssistant.refreshAnalysis() }
+        // Whatever was checked with the Apple fallback while Harper started gets checked again by Harper.
+        NotificationCenter.default.addObserver(forName: HarperEngine.didBecomeReady, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshAnalysis(); self?.systemAssistant.refreshAnalysis() }
+        }
+        // A slow pass finished in the background: re-check only the field still showing that text.
+        NotificationCenter.default.addObserver(forName: HarperEngine.didCatchUp, object: nil, queue: .main) { [weak self] note in
+            guard let text = note.userInfo?[HarperEngine.caughtUpTextKey] as? String else { return }
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                if HarperEngine.same(self.editor.string, text) { self.refreshAnalysis() }
+                self.systemAssistant.refreshAnalysis(ifShowing: text)
             }
         }
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1220, height: 780), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)

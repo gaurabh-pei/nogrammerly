@@ -74,43 +74,14 @@ struct HarperIntegrationTests {
         #expect(found.contains { $0.original == "i" && $0.replacement == "I" })
     }
 
-    /// The main-thread path never waits out a slow pass: a large new field gets the Apple checker's results at once,
-    /// Harper finishes it in the background and announces it, and the next pass answers from Harper's cache.
-    @Test func slowPassFallsBackAtOnceAndCatchesUp() throws {
+    /// harper-ls 3.2.0 counts only LF as a line break, so a finding after a lone CR or a CRLF must still map back.
+    @Test func findingsAfterCarriageReturnsMapBack() throws {
         let engine = try HarperTestSupport.makeEngine(); defer { engine.stop() }
-        var text = ""
-        var i = 0
-        while (text as NSString).length < WritingEngine.maxLength - 200 {
-            text += "Note \(i): we recieve the report and teh team reviews it before Friday.\n\n"; i += 1
+        for text in ["Hi\rLook at teh launch.", "Hi\r\nLook at teh launch.", "Hi\nLook at teh launch."] {
+            let found = try #require(engine.lint(text, deadline: HarperTestSupport.patient()))
+            let typo = try #require(found.first { $0.original == "teh" }, "\(text.debugDescription)")
+            #expect((text as NSString).substring(with: typo.range) == "teh")
         }
-        let caughtUp = Locked(false)
-        let observer = NotificationCenter.default.addObserver(forName: HarperEngine.didCatchUp, object: engine, queue: nil) { _ in caughtUp.set(true) }
-        defer { NotificationCenter.default.removeObserver(observer) }
-        let start = Date()
-        let first = MacWritingEngine.analyze(text, harper: engine, budget: 0.01)
-        #expect(Date().timeIntervalSince(start) < 2) // bounded by the budget plus the Apple pass, not Harper's 1 s
-        #expect(!first.suggestions.contains { $0.title.hasSuffix("(Harper)") })
-        #expect(HarperTestSupport.waitUntil(HarperTestSupport.patience) { caughtUp.get() })
-        let second = MacWritingEngine.analyze(text, harper: engine, budget: MacWritingEngine.mainThreadBudget)
-        #expect(second.suggestions.contains { $0.title.hasSuffix("(Harper)") })
-        // The same text is not caught up twice, so a chunk that never completes cannot loop the re-check.
-        let repeats = Locked(0)
-        let again = NotificationCenter.default.addObserver(forName: HarperEngine.didCatchUp, object: engine, queue: nil) { _ in repeats.set(repeats.get() + 1) }
-        defer { NotificationCenter.default.removeObserver(again) }
-        engine.catchUp(text)
-        #expect(!HarperTestSupport.waitUntil(1) { repeats.get() > 0 })
-    }
-
-    @Test func mainThreadLintDoesNotWaitForTheLock() throws {
-        let engine = try HarperTestSupport.makeEngine(); defer { engine.stop() }
-        var text = ""
-        while (text as NSString).length < WritingEngine.maxLength - 200 { text += "We recieve the report and teh team reviews it.\n\n" }
-        let busy = DispatchSemaphore(value: 0)
-        DispatchQueue.global().async { busy.signal(); _ = engine.lint(text, deadline: HarperTestSupport.patient()) }
-        busy.wait(); usleep(20_000)
-        let start = Date()
-        _ = engine.lint("I recieve it.", deadline: Date(timeIntervalSinceNow: 5), waitForLock: false)
-        #expect(Date().timeIntervalSince(start) < 0.5)
     }
 
     @Test func twentyThousandCharactersWithinBudget() throws {

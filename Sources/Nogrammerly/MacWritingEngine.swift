@@ -22,11 +22,11 @@ enum MacWritingEngine {
     /// another lint running) falls back at once and hands the text to `catchUp(_:)`; without one it waits up to 1 s.
     static func analyze(_ text: String, harper: HarperEngine?, budget: TimeInterval? = nil) -> WritingAnalysis {
         guard let harper else { return WritingEngine.analyze(text) }
-        let found = budget.map { harper.lint(text, deadline: Date(timeIntervalSinceNow: $0), waitForLock: false) } ?? harper.lint(text)
-        guard let found else {
-            if budget != nil { harper.catchUp(text) }
-            return WritingEngine.analyze(text)
-        }
+        let pass = budget.map { harper.lintPass(text, deadline: Date(timeIntervalSinceNow: $0), waitForLock: false) } ?? harper.lintPass(text)
+        // A miss, or a pass whose fixes did not all arrive, is finished in the background; the findings that did
+        // arrive are shown now.
+        if budget != nil, pass?.complete != true { harper.catchUp(text) }
+        guard let found = pass?.suggestions else { return WritingEngine.analyze(text) }
         // Harper is primary; the local phrase rules fill in what it does not cover ("utilize", "I think").
         // NOGRAMMERLY_APPLE_SECONDARY=1 also merges the Apple checker behind both.
         return WritingEngine.analyze(text, primary: preferAppleCorrections(found, in: text), systemChecker: appleSecondary)

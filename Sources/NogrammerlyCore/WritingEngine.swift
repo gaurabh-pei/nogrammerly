@@ -60,8 +60,11 @@ public enum WritingEngine {
         let words = text.split { $0.isWhitespace }.count
         let avg = words / max(sentenceCount, 1)
         // Specific phrase rules win over the dictionary where they overlap (e.g. "utilize" → "use", not "utilise").
-        let local = systemChecker ? merge(suggestions, checkSpellingAndGrammar(text)) : suggestions
-        let unique = primary.isEmpty ? local : merge(primary, local)
+        // With a primary checker: primary, then phrase rules, then the system checker. Merging the dictionary last
+        // means a "Long sentence" finding dropped by a primary finding no longer takes the sentence's spelling
+        // results with it. With no primary findings this is exactly `merge(suggestions, system)` as before.
+        let system = systemChecker ? checkSpellingAndGrammar(text) : []
+        let unique = merge(merge(primary, suggestions), system)
         let readability = max(35, min(100, 100 - max(avg - 12, 0) * 3 - unique.count * 2))
         let tone = text.contains("!") ? "Enthusiastic" : text.lowercased().contains("please") ? "Polite" : "Neutral"
         return WritingAnalysis(suggestions: unique, words: words, readability: readability, tone: tone)

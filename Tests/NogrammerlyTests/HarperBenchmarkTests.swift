@@ -16,9 +16,9 @@ struct HarperBenchmarkTests {
 
     static func ms(_ seconds: TimeInterval) -> Double { (seconds * 100_000).rounded() / 100 }
 
-    static func time(_ body: () -> Void) -> TimeInterval {
+    static func time(_ body: () throws -> Void) rethrows -> TimeInterval {
         let start = DispatchTime.now().uptimeNanoseconds
-        body()
+        try body()
         return Double(DispatchTime.now().uptimeNanoseconds - start) / 1e9
     }
 
@@ -52,6 +52,7 @@ struct HarperBenchmarkTests {
         let engine = try HarperTestSupport.makeEngine(); defer { engine.stop() }
         var harperRight = 0, analyzeRight = 0, flagged = 0
         var detail: [String] = []
+        var missed: [String] = []
         for text in Self.corpus["errors"]! {
             let raw = try #require(engine.lint(text, deadline: HarperTestSupport.patient()))
             let analyzed = MacWritingEngine.analyze(text, harper: engine).suggestions
@@ -64,16 +65,25 @@ struct HarperBenchmarkTests {
                 if final == expected { analyzeRight += 1 }
                 detail.append("\(item.original): harper \(item.replacement ?? "-") -> final \(final ?? "-") (want \(expected))")
             }
+            // Corpus misspellings Harper did not flag as spelling at all, so they count against it instead of vanishing.
+            for word in Self.spellingFixes.keys.sorted() {
+                for range in WritingEngine.wordRanges(of: word, in: text) where (text as NSString).substring(with: range) == word
+                    && !raw.contains(where: { $0.isSpelling && $0.range == range }) {
+                    let caught = analyzed.first { NSIntersectionRange($0.range, range).length > 0 }
+                    missed.append("\(word): not flagged as spelling by Harper; final \(caught.map { "\($0.title): \($0.replacement ?? "-")" } ?? "none")")
+                }
+            }
         }
-        Self.report("spelling_accuracy", ["misspellings_flagged": flagged, "harper_first_suggestion_right": harperRight,
+        Self.report("spelling_accuracy", ["misspellings_flagged": flagged, "misspellings_missed": missed, "harper_first_suggestion_right": harperRight,
                                           "with_apple_correction_right": analyzeRight, "detail": detail])
     }
 
     @Test func latencyAndMemory() throws {
         // Cold: spawn + initialize + first document (dictionary load).
-        var engine: HarperEngine!
-        let cold = Self.time { engine = try? HarperTestSupport.makeEngine() }
-        defer { engine?.stop() }
+        var started: HarperEngine?
+        let cold = try Self.time { started = try HarperTestSupport.makeEngine() } // a failed start fails the test
+        let engine = try #require(started)
+        defer { engine.stop() }
         let message = Self.corpus["errors"]![0]
         var first: [WritingSuggestion]?
         let firstLint = Self.time { first = engine.lint(message) }

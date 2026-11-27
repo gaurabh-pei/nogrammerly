@@ -8,13 +8,17 @@ Usage: fake-harper-ls.py MODE --stdio
   late-publish  hold back the diagnostics of a document containing WITHHOLD until the next document is
                 opened, then send them (for the old URI) just before that document's own diagnostics
   slow-actions  answer code-action requests for the first document containing SLOW after 1.5 s
+  hold PATH     hold back the diagnostics of every document containing HOLD until the file PATH exists;
+                creates PATH.seen when such a document arrives, so a test knows the request is outstanding
 """
+import os
 import json
 import sys
 import threading
 import time
 
 MODE = sys.argv[1] if len(sys.argv) > 1 else "normal"
+RELEASE = sys.argv[2] if MODE == "hold" else None
 out = sys.stdout.buffer
 out_lock = threading.Lock()
 
@@ -90,6 +94,14 @@ while True:
             withheld = None
         if MODE == "late-publish" and "WITHHOLD" in document["text"]:
             withheld = (document["uri"], document["text"])
+        elif MODE == "hold" and "HOLD" in document["text"]:
+            open(RELEASE + ".seen", "w").close()
+
+            def release_later(uri=document["uri"], text=document["text"]):
+                while not os.path.exists(RELEASE):
+                    time.sleep(0.01)
+                publish(uri, text)
+            threading.Thread(target=release_later, daemon=True).start()
         else:
             publish(document["uri"], document["text"])
     elif method == "textDocument/codeAction":

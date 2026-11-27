@@ -10,19 +10,11 @@ import NogrammerlyCore
 enum HarperMapper {
     typealias JSON = [String: Any]
 
-    /// Absolute UTF-16 offsets where each line starts. LSP line breaks are `\n`, `\r\n` and `\r`.
+    /// Absolute UTF-16 offsets where each line starts. Only LF ends a line: harper-ls 3.2.0 computes positions that
+    /// way (harper-ls/src/pos_conv.rs), so a lone CR stays inside its line and CRLF ends at the LF.
     static func lineStarts(of text: NSString) -> [Int] {
         var starts = [0]
-        var i = 0
-        let length = text.length
-        while i < length {
-            let unit = text.character(at: i)
-            if unit == 0x0A || unit == 0x0D {
-                if unit == 0x0D, i + 1 < length, text.character(at: i + 1) == 0x0A { i += 1 }
-                starts.append(i + 1)
-            }
-            i += 1
-        }
+        for i in 0..<text.length where text.character(at: i) == 0x0A { starts.append(i + 1) }
         return starts
     }
 

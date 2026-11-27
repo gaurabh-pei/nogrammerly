@@ -55,8 +55,8 @@ final class HarperEngine: @unchecked Sendable {
     /// Notifications go out from here, never from the thread that changed state: a queue-bound observer makes
     /// `post` wait for it, and that thread may hold `lintLock` while the main thread is waiting for the lock.
     private static let notificationQueue = DispatchQueue(label: "nogrammerly.harper.notifications")
-    private static func post(_ name: Notification.Name, object: Any? = nil) {
-        notificationQueue.async { NotificationCenter.default.post(name: name, object: object) }
+    private static func post(_ name: Notification.Name, object: Any? = nil, userInfo: [String: String]? = nil) {
+        notificationQueue.async { NotificationCenter.default.post(name: name, object: object, userInfo: userInfo) }
     }
     nonisolated(unsafe) private static var _status = selection.reason
     /// One visible line describing which checker is running. The app shows it; fallbacks are never silent.
@@ -181,15 +181,18 @@ final class HarperEngine: @unchecked Sendable {
     /// Serial: runs `catchUp(_:)` lints off the main thread.
     private let catchUpQueue = DispatchQueue(label: "nogrammerly.harper.catchup", qos: .userInitiated)
     private var pendingCatchUp: String?
-    /// The text the most recent catch-up ran on. Unchanged text is not caught up twice, so a chunk that never
-    /// completes cannot keep the re-check loop going.
-    private var lastCatchUp: String?
+    /// Words added while Harper was not running; sent once it is ready, so the word is not flagged again.
+    private var pendingWords: [String] = []
+    /// For tests.
+    var pendingWordCount: Int { state.lock(); defer { state.unlock() }; return pendingWords.count }
 
     // Serializes lint calls and owns the fields below.
     private let lintLock = NSLock()
     private var openURI: String?
-    private var cache: [String: [WritingSuggestion]] = [:]
-    private var cacheOrder: [String] = []
+    /// Keyed by the chunk's exact UTF-16 code units, not `String`: Swift treats canonically equivalent strings as
+    /// equal ("é" and "e\u{301}"), but their UTF-16 offsets differ, so a cached range would land in the wrong place.
+    private var cache: [[UInt16]: [WritingSuggestion]] = [:]
+    private var cacheOrder: [[UInt16]] = []
 
     var isRunning: Bool { state.lock(); defer { state.unlock() }; return process?.isRunning == true && ready }
     /// Whether the most recent lint() call answered (false when it fell back). For tests and the benchmark.
@@ -238,7 +241,7 @@ final class HarperEngine: @unchecked Sendable {
             return false
         }
         openURI = nil
-        cache.removeAll(); cacheOrder.removeAll()
+        clearCache()
         let initialize: [String: Any] = [
             "processId": Int(getpid()),
             "rootUri": NSNull(),
@@ -257,6 +260,10 @@ final class HarperEngine: @unchecked Sendable {
         // Ready only now, and `starting` cleared first, so a caller that sees isRunning is never turned away.
         state.lock(); starting = false; ready = self.process?.isRunning == true; let isReady = ready; state.unlock()
         guard isReady else { return false }
+        state.lock(); var words = pendingWords; pendingWords = []; state.unlock()
+        // A word that could not be sent (Harper stopped again meanwhile) stays queued for the next start.
+        while let word = words.first, executeLocked("HarperAddToUserDict", arguments: { [word, $0] }) { words.removeFirst() }
+        if !words.isEmpty { state.lock(); pendingWords = words + pendingWords; state.unlock() }
         Self.status = Self.selection.reason
         Self.post(Self.didBecomeReady, object: self)
         return true
@@ -276,7 +283,10 @@ final class HarperEngine: @unchecked Sendable {
     }
 
     private func terminate(_ process: Process, grace: TimeInterval = 1) {
-        state.lock(); try? input?.close(); input = nil; state.unlock()
+        state.lock()
+        if let input { writeQueue.async { try? input.close() } } // after any write already queued, never before
+        input = nil
+        state.unlock()
         let deadline = Date(timeIntervalSinceNow: grace)
         while process.isRunning, Date() < deadline { usleep(10_000) }
         if process.isRunning { process.terminate() } // SIGTERM
@@ -313,6 +323,13 @@ final class HarperEngine: @unchecked Sendable {
     /// `waitForLock` false returns nil at once when another lint holds the engine (the main-thread path: a
     /// `catchUp(_:)` lint may be running), and a miss then leaves the status line alone, since a catch-up follows.
     func lint(_ text: String, deadline: Date = Date(timeIntervalSinceNow: 1), waitForLock: Bool = true) -> [WritingSuggestion]? {
+        lintPass(text, deadline: deadline, waitForLock: waitForLock)?.suggestions
+    }
+
+    /// `lint` plus whether every fix arrived and whether anything was linted rather than read from the cache.
+    /// `complete` is false when some chunk's code actions missed the deadline: those findings are shown without a
+    /// replacement and the chunk is not cached, so a catch-up should follow.
+    func lintPass(_ text: String, deadline: Date = Date(timeIntervalSinceNow: 1), waitForLock: Bool = true) -> (suggestions: [WritingSuggestion], complete: Bool, fresh: Bool)? {
         setLastLintSucceeded(false)
         // Take the lock without ever waiting behind a start: poll it, and give up as soon as a start is flagged.
         while !lintLock.try() {
@@ -328,46 +345,74 @@ final class HarperEngine: @unchecked Sendable {
         guard isRunning else { return nil }
         let nsText = text as NSString
         var results: [WritingSuggestion] = []
+        var complete = true
+        var fresh = false
         for chunkRange in Self.chunks(of: nsText) {
             let chunk = nsText.substring(with: chunkRange)
             guard chunk.contains(where: { !$0.isWhitespace }) else { continue }
             let found: [WritingSuggestion]
-            if let cached = cache[chunk] {
+            if let cached = cache[Array(chunk.utf16)] {
                 found = cached
             } else {
-                guard let fresh = lintChunk(chunk, deadline: deadline, reportMiss: waitForLock) else { return nil }
+                guard let linted = lintChunk(chunk, deadline: deadline, reportMiss: waitForLock) else { return nil }
                 // A chunk whose fixes missed the deadline is shown as is but not cached, so the next pass retries it.
-                if fresh.complete { remember(fresh.suggestions, for: chunk) }
-                found = fresh.suggestions
+                if linted.complete { remember(linted.suggestions, for: chunk) } else { complete = false }
+                found = linted.suggestions
+                fresh = true
             }
             results += found.map { $0.shifted(by: chunkRange.location) }
         }
         setLastLintSucceeded(true)
         if isRunning { Self.status = Self.selection.reason } // never paper over a stop reported meanwhile
-        return results
+        return (results, complete, fresh)
     }
 
     static let catchUpBudget: TimeInterval = 10
+    /// A catch-up whose pass comes back incomplete tries again, up to this many passes in all.
+    static let catchUpAttempts = 2
+    /// `didCatchUp` userInfo key holding the text that was caught up, so only the field showing it re-checks.
+    static let caughtUpTextKey = "text"
 
-    /// Finishes a lint that missed a short deadline, off the calling thread. Nobody waits on it, so it gets
-    /// `catchUpBudget` rather than 1 s (a dense 20,000-character paste takes about 1.8 s). Completed chunks are cached,
-    /// so the next pass over the same text answers from the cache; posts `didCatchUp` when done.
-    /// Calls made while one is queued replace its text, so only the latest field contents are linted, and text that
-    /// was already caught up is not queued again.
+    /// Finishes a lint that missed a short deadline (or came back without all its fixes), off the calling thread.
+    /// Nobody waits on it, so it gets `catchUpBudget` rather than 1 s (a dense 20,000-character paste takes about
+    /// 1.8 s). Completed chunks are cached, so the next pass over the same text answers from the cache.
+    ///
+    /// Only the latest text is kept: a call while one is queued replaces it, and a call for the text that is running
+    /// queues it again, so an undo back to that text is not lost. A pass that comes back incomplete is retried up to
+    /// `catchUpAttempts` passes unless newer text is waiting. `didCatchUp` (with the text) is posted only when a pass
+    /// completes and linted something new; a pass served entirely from the cache posts nothing, so the re-check it
+    /// triggers ends there.
     func catchUp(_ text: String) {
         guard isRunning else { return }
         state.lock()
-        let repeated = text == lastCatchUp
+        let duplicate = Self.same(text, pendingCatchUp)
         let queued = pendingCatchUp != nil
-        if !repeated { pendingCatchUp = text }
+        if !duplicate { pendingCatchUp = text }
         state.unlock()
-        guard !repeated, !queued else { return }
-        catchUpQueue.async { [weak self] in
-            guard let self else { return }
-            self.state.lock(); let latest = self.pendingCatchUp; self.pendingCatchUp = nil; self.lastCatchUp = latest; self.state.unlock()
-            guard let latest, self.lint(latest, deadline: Date(timeIntervalSinceNow: Self.catchUpBudget)) != nil else { return }
-            Self.post(Self.didCatchUp, object: self)
+        guard !duplicate, !queued else { return }
+        catchUpQueue.async { [weak self] in self?.runCatchUp() }
+    }
+
+    /// Exact UTF-16 equality, for the same reason the cache is keyed on code units.
+    static func same(_ a: String, _ b: String?) -> Bool { b.map { a.utf16.elementsEqual($0.utf16) } ?? false }
+
+    private func runCatchUp() {
+        state.lock(); let text = pendingCatchUp; pendingCatchUp = nil; state.unlock()
+        guard let text else { return }
+        var pass: (suggestions: [WritingSuggestion], complete: Bool, fresh: Bool)?
+        var linted = false
+        for _ in 0..<Self.catchUpAttempts {
+            pass = lintPass(text, deadline: Date(timeIntervalSinceNow: Self.catchUpBudget))
+            linted = linted || pass?.fresh == true
+            state.lock(); let newer = pendingCatchUp != nil; state.unlock()
+            if pass?.complete == true || newer { break }
         }
+        if pass?.complete == true, linted { Self.post(Self.didCatchUp, object: self, userInfo: [Self.caughtUpTextKey: text]) }
+    }
+
+    /// Caller holds lintLock.
+    private func clearCache() {
+        cache.removeAll(); cacheOrder.removeAll()
     }
 
     /// Sends one chunk as its own document, waits for its diagnostics, then fetches the fixes. `complete` is false when
@@ -404,8 +449,9 @@ final class HarperEngine: @unchecked Sendable {
     }
 
     private func remember(_ found: [WritingSuggestion], for chunk: String) {
-        cache[chunk] = found
-        cacheOrder.append(chunk)
+        let key = Array(chunk.utf16)
+        cache[key] = found
+        cacheOrder.append(key)
         if cacheOrder.count > 512 { cache[cacheOrder.removeFirst()] = nil }
     }
 
@@ -446,7 +492,13 @@ final class HarperEngine: @unchecked Sendable {
                 let window = NSRange(location: start + chunkHardLimit / 2, length: chunkHardLimit / 2)
                 let space = text.rangeOfCharacter(from: .whitespacesAndNewlines, options: .backwards, range: window)
                 if space.location != NSNotFound { end = NSMaxRange(space) }
-                else { end = text.rangeOfComposedCharacterSequence(at: end).location }
+                else {
+                    // Back off to the start of the composed sequence at the limit. If that sequence starts at `start`
+                    // (one base character with thousands of combining marks), emit it whole instead: a piece may run
+                    // over the limit, but it is never empty and a sequence is never split.
+                    let sequence = text.rangeOfComposedCharacterSequence(at: end)
+                    end = sequence.location > start ? sequence.location : NSMaxRange(sequence)
+                }
                 emit(upTo: end)
             }
             lastCut = cut
@@ -462,20 +514,31 @@ final class HarperEngine: @unchecked Sendable {
     // editors). Nogrammerly's own ignore list, keyed by the Harper rule name and the flagged text, filters them.
 
     /// Adds a word to Nogrammerly's Harper user dictionary (persisted at `userDictPath`).
+    /// Adds `word` to Harper's user dictionary (kept on disk, so it survives a restart). While Harper is starting,
+    /// restarting or stopped, the word is queued and sent as soon as it is ready.
     func addToDictionary(_ word: String) {
-        execute("HarperAddToUserDict") { [word, $0] }
+        withLintLock {
+            guard isRunning else {
+                state.lock(); if !pendingWords.contains(word) { pendingWords.append(word) }; state.unlock()
+                return
+            }
+            if !executeLocked("HarperAddToUserDict", arguments: { [word, $0] }) {
+                state.lock(); if !pendingWords.contains(word) { pendingWords.append(word) }; state.unlock()
+            }
+        }
     }
 
-    private func execute(_ command: String, arguments: (String) -> [Any]) {
-        withLintLock {
-            guard isRunning else { return }
-            // harper-ls re-publishes the open document after a command (response first, then the publish), and may
-            // or may not for a closed one. Retire the URI so that publish can never answer the next lint.
-            state.lock(); let uri = openURI ?? currentURI; state.unlock()
-            _ = request("workspace/executeCommand", ["command": command, "arguments": arguments(uri)], deadline: Date(timeIntervalSinceNow: 1))
-            retireDocument()
-            cache.removeAll(); cacheOrder.removeAll()
-        }
+    /// Whether the server answered the command. Caller holds lintLock.
+    @discardableResult
+    private func executeLocked(_ command: String, arguments: (String) -> [Any]) -> Bool {
+        guard isRunning else { return false }
+        // harper-ls re-publishes the open document after a command (response first, then the publish), and may
+        // or may not for a closed one. Retire the URI so that publish can never answer the next lint.
+        state.lock(); let uri = openURI ?? currentURI; state.unlock()
+        let answered = request("workspace/executeCommand", ["command": command, "arguments": arguments(uri)], deadline: Date(timeIntervalSinceNow: 1)) != nil
+        retireDocument()
+        clearCache()
+        return answered
     }
 
     private func withLintLock<T>(_ body: () -> T) -> T {
@@ -524,7 +587,10 @@ final class HarperEngine: @unchecked Sendable {
         guard let body = try? JSONSerialization.data(withJSONObject: message) else { return false }
         var frame = Data("Content-Length: \(body.count)\r\n\r\n".utf8)
         frame.append(body)
-        state.lock(); let input = self.input; state.unlock()
+        // Enqueue under the state lock: `terminate` enqueues the close under the same lock, so the close always runs
+        // after every write that saw the open handle. Writing to a closed FileHandle raises an Objective-C exception
+        // that `try?` cannot catch.
+        state.lock(); defer { state.unlock() }
         guard let input else { return false }
         writeQueue.async { try? input.write(contentsOf: frame) } // EPIPE after an exit is reported by processDidExit
         return true

@@ -126,7 +126,8 @@ import NogrammerlyCore
     }
 
     @Test func lineStartsHandleAllBreaks() {
-        #expect(HarperMapper.lineStarts(of: "a\nb\r\nc\rd") == [0, 2, 5, 7])
+        // LF only, as harper-ls 3.2.0 counts: CRLF ends at the LF, a lone CR stays inside its line.
+        #expect(HarperMapper.lineStarts(of: "a\nb\r\nc\rd") == [0, 2, 5])
         #expect(HarperMapper.lineStarts(of: "") == [0])
     }
 

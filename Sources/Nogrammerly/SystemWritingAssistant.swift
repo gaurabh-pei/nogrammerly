@@ -17,6 +17,7 @@ final class SystemWritingAssistant: NSObject, NSMenuDelegate {
     private var passNextRightClick = false
     private var element: AXUIElement?
     private var text = ""
+    private var needsReanalysis = false
     private var suggestions: [WritingSuggestion] = []
     private var marks: [Mark] = []
     private var ignored = Set<String>()
@@ -67,7 +68,13 @@ final class SystemWritingAssistant: NSObject, NSMenuDelegate {
     }
 
     /// Re-checks the focused field on the next poll even if its text has not changed (e.g. once Harper is ready).
-    func refreshAnalysis() { text = "" }
+    /// `text` stays paired with `suggestions` until then, so a fix applied meanwhile still sees matching ranges.
+    func refreshAnalysis() { needsReanalysis = true }
+
+    /// Re-checks the focused field only if it still holds `caughtUp` (a background Harper pass for that text finished).
+    func refreshAnalysis(ifShowing caughtUp: String) {
+        if HarperEngine.same(text, caughtUp) { needsReanalysis = true }
+    }
 
     func stop() {
         pollTimer?.invalidate(); pollTimer = nil
@@ -96,9 +103,11 @@ final class SystemWritingAssistant: NSObject, NSMenuDelegate {
               let focused = focusedTextElement(), let value = stringValue(of: focused),
               !value.isEmpty, (value as NSString).length <= WritingEngine.maxLength else { reset(); return }
 
-        if element == nil || !CFEqual(element, focused) || value != text {
+        // UTF-16 comparison: canonically equivalent text ("é" vs "e\u{301}") still has different offsets.
+        if element == nil || !CFEqual(element, focused) || !value.utf16.elementsEqual(text.utf16) || needsReanalysis {
             element = focused
             text = value
+            needsReanalysis = false
             suggestions = MacWritingEngine.analyze(value).suggestions.filter { !ignored.contains($0.ignoreKey) }
             scheduleProofread(of: value)
         }
