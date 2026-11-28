@@ -100,11 +100,11 @@ struct HarperBenchmarkTests {
         var failures = 0
         let keystrokes = snapshots("x").map { text in Self.time { if engine.lint(text) == nil { failures += 1 } } }
         let unchanged = (0..<60).map { _ in Self.time { if engine.lint(base) == nil { failures += 1 } } }
-        // Full analyze() (checker + local rules + merge), the main-thread path. A Harper pass that fell back to
+        // Full analyze() (checker + local rules + merge) with the app's main-thread budget. A Harper pass that fell back to
         // Apple is counted as a failure, not timed as Harper.
         let analyzeSnapshots = snapshots("y")
         let analyzeTimes = analyzeSnapshots.map { text in
-            Self.time { _ = MacWritingEngine.analyze(text, harper: engine); if !engine.lastLintSucceeded { failures += 1 } }
+            Self.time { _ = MacWritingEngine.analyze(text, harper: engine, budget: MacWritingEngine.mainThreadBudget); if !engine.lastLintSucceeded { failures += 1 } }
         }
         let appleTimes = analyzeSnapshots.map { text in Self.time { _ = MacWritingEngine.analyze(text, harper: nil) } }
         #expect(failures == 0)
@@ -129,7 +129,7 @@ struct HarperBenchmarkTests {
         let edited = (long as NSString).replacingCharacters(in: NSRange(location: middle, length: 0), with: "q")
         var longEditFound: [WritingSuggestion]?
         let longEdit = Self.time { longEditFound = fresh.lint(edited) }
-        let longAnalyze = Self.time { _ = MacWritingEngine.analyze(edited + " ", harper: fresh) }
+        let longAnalyze = Self.time { _ = MacWritingEngine.analyze(edited + " ", harper: fresh, budget: MacWritingEngine.mainThreadBudget) }
         let longAnalyzeOK = fresh.lastLintSucceeded
         let longApple = Self.time { _ = MacWritingEngine.analyze(edited + " ", harper: nil) }
         #expect(longFound != nil && longEditFound != nil && longAnalyzeOK)

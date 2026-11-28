@@ -100,7 +100,7 @@ struct HarperFakeServerTests {
     }
 
     /// A pass that misses the main-thread budget falls back at once, Harper finishes it in the background and
-    /// announces the text, and the next pass answers from the cache. The same text is not caught up twice.
+    /// announces the text, and the next pass answers from the cache without scheduling another catch-up.
     @Test func slowPassFallsBackAtOnceAndCatchesUp() throws {
         let hold = FakeHarper.Hold(); defer { hold.release() }
         let engine = try FakeHarper.engine("hold \(hold.path)"); defer { engine.stop() }
@@ -123,8 +123,24 @@ struct HarperFakeServerTests {
         #expect(HarperTestSupport.waitUntil(HarperTestSupport.patience) { caughtUp.get() == [text] })
         let second = MacWritingEngine.analyze(text, harper: engine, budget: MacWritingEngine.mainThreadBudget)
         #expect(second.suggestions.contains { $0.original == "teh" && $0.title.hasSuffix("(Harper)") })
-        engine.catchUp(text) // already caught up: no second announcement
+        // The re-check the announcement triggers is answered from the cache in full: no further catch-up, no loop.
         #expect(!HarperTestSupport.waitUntil(0.5) { caughtUp.get().count > 1 })
+    }
+
+    /// A field that fell back while another lint held the engine still gets its re-check when the catch-up for its
+    /// text is served entirely from the cache.
+    @Test func cacheServedCatchUpStillAnnounces() throws {
+        let engine = try FakeHarper.engine("normal"); defer { engine.stop() }
+        try #require(engine.start(timeout: HarperTestSupport.patience))
+        let text = "Look at teh numbers."
+        #expect(engine.lintPass(text, deadline: HarperTestSupport.patient())?.complete == true) // now cached
+        let caughtUp = Locked<[String]>([])
+        let observer = NotificationCenter.default.addObserver(forName: HarperEngine.didCatchUp, object: engine, queue: nil) { note in
+            if let done = note.userInfo?[HarperEngine.caughtUpTextKey] as? String { caughtUp.set(caughtUp.get() + [done]) }
+        }
+        defer { NotificationCenter.default.removeObserver(observer) }
+        engine.catchUp(text)
+        #expect(HarperTestSupport.waitUntil(HarperTestSupport.patience) { caughtUp.get() == [text] })
     }
 
     /// Diagnostics that arrive in time but without their fixes are shown now and finished by a catch-up, so the fix

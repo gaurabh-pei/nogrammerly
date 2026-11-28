@@ -326,10 +326,10 @@ final class HarperEngine: @unchecked Sendable {
         lintPass(text, deadline: deadline, waitForLock: waitForLock)?.suggestions
     }
 
-    /// `lint` plus whether every fix arrived and whether anything was linted rather than read from the cache.
+    /// `lint` plus whether every fix arrived.
     /// `complete` is false when some chunk's code actions missed the deadline: those findings are shown without a
     /// replacement and the chunk is not cached, so a catch-up should follow.
-    func lintPass(_ text: String, deadline: Date = Date(timeIntervalSinceNow: 1), waitForLock: Bool = true) -> (suggestions: [WritingSuggestion], complete: Bool, fresh: Bool)? {
+    func lintPass(_ text: String, deadline: Date = Date(timeIntervalSinceNow: 1), waitForLock: Bool = true) -> (suggestions: [WritingSuggestion], complete: Bool)? {
         setLastLintSucceeded(false)
         // Take the lock without ever waiting behind a start: poll it, and give up as soon as a start is flagged.
         while !lintLock.try() {
@@ -346,7 +346,6 @@ final class HarperEngine: @unchecked Sendable {
         let nsText = text as NSString
         var results: [WritingSuggestion] = []
         var complete = true
-        var fresh = false
         for chunkRange in Self.chunks(of: nsText) {
             let chunk = nsText.substring(with: chunkRange)
             guard chunk.contains(where: { !$0.isWhitespace }) else { continue }
@@ -358,13 +357,12 @@ final class HarperEngine: @unchecked Sendable {
                 // A chunk whose fixes missed the deadline is shown as is but not cached, so the next pass retries it.
                 if linted.complete { remember(linted.suggestions, for: chunk) } else { complete = false }
                 found = linted.suggestions
-                fresh = true
             }
             results += found.map { $0.shifted(by: chunkRange.location) }
         }
         setLastLintSucceeded(true)
         if isRunning { Self.status = Self.selection.reason } // never paper over a stop reported meanwhile
-        return (results, complete, fresh)
+        return (results, complete)
     }
 
     static let catchUpBudget: TimeInterval = 10
@@ -379,9 +377,9 @@ final class HarperEngine: @unchecked Sendable {
     ///
     /// Only the latest text is kept: a call while one is queued replaces it, and a call for the text that is running
     /// queues it again, so an undo back to that text is not lost. A pass that comes back incomplete is retried up to
-    /// `catchUpAttempts` passes unless newer text is waiting. `didCatchUp` (with the text) is posted only when a pass
-    /// completes and linted something new; a pass served entirely from the cache posts nothing, so the re-check it
-    /// triggers ends there.
+    /// `catchUpAttempts` passes unless newer text is waiting. `didCatchUp` (with the text) is posted whenever a pass
+    /// completes, also when it was served from the cache: the field that asked fell back to Apple and needs the
+    /// re-check. That re-check answers from the cache in full, so it schedules no further catch-up and the loop ends.
     func catchUp(_ text: String) {
         guard isRunning else { return }
         state.lock()
@@ -399,15 +397,13 @@ final class HarperEngine: @unchecked Sendable {
     private func runCatchUp() {
         state.lock(); let text = pendingCatchUp; pendingCatchUp = nil; state.unlock()
         guard let text else { return }
-        var pass: (suggestions: [WritingSuggestion], complete: Bool, fresh: Bool)?
-        var linted = false
+        var pass: (suggestions: [WritingSuggestion], complete: Bool)?
         for _ in 0..<Self.catchUpAttempts {
             pass = lintPass(text, deadline: Date(timeIntervalSinceNow: Self.catchUpBudget))
-            linted = linted || pass?.fresh == true
             state.lock(); let newer = pendingCatchUp != nil; state.unlock()
             if pass?.complete == true || newer { break }
         }
-        if pass?.complete == true, linted { Self.post(Self.didCatchUp, object: self, userInfo: [Self.caughtUpTextKey: text]) }
+        if pass?.complete == true { Self.post(Self.didCatchUp, object: self, userInfo: [Self.caughtUpTextKey: text]) }
     }
 
     /// Caller holds lintLock.
