@@ -1,0 +1,9 @@
+# Pinned harper-ls release bundled into Nogrammerly.app (Contents/Helpers/harper-ls).
+# Fetched and verified by script/fetch_harper_ls.sh; the binary itself is not committed.
+HARPER_VERSION=3.2.0
+HARPER_ASSET=harper-ls-aarch64-apple-darwin.tar.gz
+HARPER_URL=https://github.com/Automattic/harper/releases/download/v3.2.0/harper-ls-aarch64-apple-darwin.tar.gz
+# sha256 of the release tarball (13,951,011 bytes)
+HARPER_TARBALL_SHA256=9dd31b0cabfb040f658a8d595cc36520eb306a5a69ac37c7b828c36574b47ce9
+# sha256 of the extracted harper-ls executable (60,820,056 bytes, Mach-O arm64)
+HARPER_BINARY_SHA256=dbf3b3badbb68a13e081259057c20e46bf54a10ba528e01d8b5b71fb46adcdf0
